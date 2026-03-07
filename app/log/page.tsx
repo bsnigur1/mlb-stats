@@ -232,11 +232,34 @@ export default function LogGame() {
 
       const playerData = playersRes.data || [];
       setPlayers(playerData);
-      setSessions(sessionsRes.data || []);
+
+      const sessionData = sessionsRes.data || [];
+
+      // Auto-close sessions that have been inactive for 2+ hours
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const staleSessions = sessionData.filter(
+        (s) => s.is_active && s.last_activity && s.last_activity < twoHoursAgo
+      );
+
+      if (staleSessions.length > 0) {
+        // Mark stale sessions as inactive
+        await supabase
+          .from('sessions')
+          .update({ is_active: false })
+          .in('id', staleSessions.map(s => s.id));
+
+        // Update local data
+        sessionData.forEach(s => {
+          if (staleSessions.find(stale => stale.id === s.id)) {
+            s.is_active = false;
+          }
+        });
+      }
+
+      setSessions(sessionData);
 
       // Check for active session within 2 hours
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      const activeSession = sessionsRes.data?.find(
+      const activeSession = sessionData.find(
         (s) => s.is_active && s.last_activity && s.last_activity > twoHoursAgo
       );
       if (activeSession) {
