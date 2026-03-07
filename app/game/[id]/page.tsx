@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Undo2, Flag, Circle, X } from 'lucide-react';
-import Link from 'next/link';
+import { ArrowLeft, Undo2, Flag, Circle, X, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { AtBatResult, Player, Game, GamePlayer, AtBat } from '@/lib/types';
 import { calculateStats, formatAvg } from '@/lib/stats';
@@ -49,6 +48,21 @@ export default function GamePage() {
   const [theirScore, setTheirScore] = useState('');
   const [ending, setEnding] = useState(false);
 
+  // Leave game modal state
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
+  // Helper to calculate current batter for 1v1 based on total outs
+  const calculateH2HBatterIndex = useCallback((atBatsData: AtBat[], numPlayers: number) => {
+    if (numPlayers === 0) return 0;
+    const totalOuts = atBatsData.filter(
+      (ab) => ab.result === 'out' || ab.result === 'strikeout'
+    ).length;
+    // Every 3 outs, switch to next batter
+    const halfInnings = Math.floor(totalOuts / 3);
+    return halfInnings % numPlayers;
+  }, []);
+
   const loadGame = useCallback(async () => {
     const { data: gameData } = await supabase
       .from('games')
@@ -79,19 +93,21 @@ export default function GamePage() {
 
     setAtBats(atBatsData || []);
 
-    // Calculate current batter based on at-bats (only for co-op modes)
+    // Calculate current batter
     if (atBatsData && gamePlayersData && gamePlayersData.length > 0) {
-      // For 1v1, always stay on first player (the user)
       if (gameData.game_mode === '1v1') {
-        setCurrentBatterIndex(0);
+        // For 1v1, switch every 3 outs
+        const batterIndex = calculateH2HBatterIndex(atBatsData, gamePlayersData.length);
+        setCurrentBatterIndex(batterIndex);
       } else {
+        // For co-op, rotate every at-bat
         const batterIndex = atBatsData.length % gamePlayersData.length;
         setCurrentBatterIndex(batterIndex);
       }
     }
 
     setLoading(false);
-  }, [gameId, router]);
+  }, [gameId, router, calculateH2HBatterIndex]);
 
   useEffect(() => {
     loadGame();
@@ -140,9 +156,14 @@ export default function GamePage() {
 
       setGame({ ...game, current_outs: newOuts, current_inning: newInning });
 
-      // Move to next batter only for co-op modes (2v2, 3v3)
-      // For 1v1, keep the same batter
-      if (game.game_mode !== '1v1') {
+      // Update batter index
+      if (game.game_mode === '1v1') {
+        // For 1v1, switch batter when outs reset to 0 (every 3 outs)
+        if (isOut && newOuts === 0) {
+          setCurrentBatterIndex((prev) => (prev + 1) % gamePlayers.length);
+        }
+      } else {
+        // For co-op modes, rotate every at-bat
         setCurrentBatterIndex((prev) => (prev + 1) % gamePlayers.length);
       }
     }
@@ -156,7 +177,6 @@ export default function GamePage() {
     if (needsRbi) {
       setPendingResult(result);
     } else {
-      // Record directly for non-RBI results
       setPendingResult(result);
     }
   };
@@ -174,7 +194,6 @@ export default function GamePage() {
       (ab) => ab.result === 'out' || ab.result === 'strikeout'
     ).length;
 
-    // Simple recalc
     const newInning = Math.floor(outs / 3) + 1;
     const newOuts = outs % 3;
 
@@ -190,7 +209,6 @@ export default function GamePage() {
     if (ending) return;
     setEnding(true);
 
-    // Build score string
     const us = parseInt(ourScore) || 0;
     const them = parseInt(theirScore) || 0;
     const result = us > them ? 'W' : us < them ? 'L' : 'T';
@@ -202,6 +220,22 @@ export default function GamePage() {
       .eq('id', gameId);
 
     router.push(`/recap/${gameId}`);
+  };
+
+  const leaveGame = async () => {
+    if (leaving) return;
+    setLeaving(true);
+
+    // Delete all at-bats for this game
+    await supabase.from('at_bats').delete().eq('game_id', gameId);
+
+    // Delete game_players
+    await supabase.from('game_players').delete().eq('game_id', gameId);
+
+    // Delete the game
+    await supabase.from('games').delete().eq('id', gameId);
+
+    router.push('/');
   };
 
   if (loading) {
@@ -216,9 +250,9 @@ export default function GamePage() {
     return (
       <div className="min-h-screen flex items-center justify-center flex-col gap-4" style={{ background: '#080D18' }}>
         <p className="text-[#4A5772]">Game not found</p>
-        <Link href="/" className="text-[#60A5FA] hover:underline">
+        <button onClick={() => router.push('/')} className="text-[#60A5FA] hover:underline">
           Go home
-        </Link>
+        </button>
       </div>
     );
   }
@@ -229,6 +263,52 @@ export default function GamePage() {
 
   return (
     <div className="min-h-screen pb-24" style={{ background: '#080D18' }}>
+      {/* Leave Game Modal */}
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-5" style={{ background: 'rgba(0,0,0,0.8)' }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-sm rounded-xl p-5"
+            style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{ background: 'rgba(239,68,68,0.15)' }}
+              >
+                <AlertTriangle size={20} color="#EF4444" />
+              </div>
+              <h2 className="text-lg font-bold text-[#EFF2FF]">Leave Game?</h2>
+            </div>
+
+            <p className="text-sm text-[#8A9BBB] mb-6">
+              Are you sure you want to leave this game? All stats won&apos;t be saved and the game will be deleted.
+            </p>
+
+            <div className="flex gap-3">
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setShowLeaveModal(false)}
+                className="flex-1 py-3 rounded-xl font-semibold"
+                style={{ background: '#162035', color: '#8A9BBB', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                No, Continue
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={leaveGame}
+                disabled={leaving}
+                className="flex-1 py-3 rounded-xl font-semibold"
+                style={{ background: '#EF4444', color: '#FFF' }}
+              >
+                {leaving ? 'Leaving...' : 'Yes, Leave'}
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* End Game Modal */}
       {showEndModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-5" style={{ background: 'rgba(0,0,0,0.8)' }}>
@@ -312,11 +392,13 @@ export default function GamePage() {
           borderBottom: '1px solid rgba(255,255,255,0.07)',
         }}
       >
-        <Link href="/">
-          <motion.div whileTap={{ scale: 0.95 }} className="p-2 -m-2">
-            <ArrowLeft size={20} color="#8A9BBB" />
-          </motion.div>
-        </Link>
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowLeaveModal(true)}
+          className="p-2 -m-2"
+        >
+          <ArrowLeft size={20} color="#8A9BBB" />
+        </motion.button>
         <div className="flex-1">
           <h1 className="font-display font-bold text-lg text-[#EFF2FF]">LIVE GAME</h1>
           <div className="text-[11px] text-[#4A5772]">
