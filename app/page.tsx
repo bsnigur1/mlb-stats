@@ -458,9 +458,9 @@ export default function Dashboard() {
     const doubles = playerAtBats.filter((ab) => ab.result === 'double').length;
     const triples = playerAtBats.filter((ab) => ab.result === 'triple').length;
     const homeruns = playerAtBats.filter((ab) => ab.result === 'homerun').length;
-    const walks = playerAtBats.filter((ab) => ab.result === 'walk').length;
     const strikeouts = playerAtBats.filter((ab) => ab.result === 'strikeout').length;
     const outs = playerAtBats.filter((ab) => ab.result === 'out').length;
+    const rbi = playerAtBats.reduce((sum, ab) => sum + (ab.rbi || 0), 0);
 
     const hits = singles + doubles + triples + homeruns;
     const ab = hits + strikeouts + outs;
@@ -473,17 +473,17 @@ export default function Dashboard() {
     const wins = playerGames.filter(g => g.score?.includes('W')).length;
     const losses = playerGames.filter(g => g.score?.includes('L')).length;
 
-    return { player, avg, hits, homeruns, wins, losses };
+    return { player, avg, hits, homeruns, rbi, wins, losses };
   });
 
   // Sort by avg for leaderboard
   const sortedByAvg = [...playerStats].sort((a, b) => b.avg - a.avg);
   const sortedByHr = [...playerStats].sort((a, b) => b.homeruns - a.homeruns);
-  const sortedByWins = [...playerStats].sort((a, b) => b.wins - a.wins);
+  const sortedByRbi = [...playerStats].sort((a, b) => b.rbi - a.rbi);
 
   const leader = sortedByAvg[0];
   const hrLeader = sortedByHr[0];
-  const winsLeader = sortedByWins[0];
+  const rbiLeader = sortedByRbi[0];
 
   if (loading) {
     return (
@@ -551,9 +551,9 @@ export default function Dashboard() {
                 index={1}
               />
               <LeaderCard
-                label="Season Wins"
-                player={winsLeader?.player.name || '-'}
-                value={String(winsLeader?.wins || 0)}
+                label="RBIs"
+                player={rbiLeader?.player.name || '-'}
+                value={String(rbiLeader?.rbi || 0)}
                 index={2}
               />
             </div>
