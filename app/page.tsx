@@ -343,7 +343,7 @@ function BottomNav() {
   );
 }
 
-// Log Game dropdown
+// Start Game dropdown
 function LogGameDropdown() {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -375,7 +375,7 @@ function LogGameDropdown() {
         style={{ background: '#F0B429', color: '#080D18' }}
       >
         <Plus size={15} />
-        Log Game
+        Start Game
       </motion.button>
 
       <AnimatePresence>
