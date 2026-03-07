@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Undo2, Flag, Circle } from 'lucide-react';
+import { ArrowLeft, Undo2, Flag, Circle, X } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { AtBatResult, Player, Game, GamePlayer, AtBat } from '@/lib/types';
@@ -43,6 +43,12 @@ export default function GamePage() {
   const [rbiInput, setRbiInput] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // End game modal state
+  const [showEndModal, setShowEndModal] = useState(false);
+  const [ourScore, setOurScore] = useState('');
+  const [theirScore, setTheirScore] = useState('');
+  const [ending, setEnding] = useState(false);
+
   const loadGame = useCallback(async () => {
     const { data: gameData } = await supabase
       .from('games')
@@ -73,10 +79,15 @@ export default function GamePage() {
 
     setAtBats(atBatsData || []);
 
-    // Calculate current batter based on at-bats
+    // Calculate current batter based on at-bats (only for co-op modes)
     if (atBatsData && gamePlayersData && gamePlayersData.length > 0) {
-      const batterIndex = atBatsData.length % gamePlayersData.length;
-      setCurrentBatterIndex(batterIndex);
+      // For 1v1, always stay on first player (the user)
+      if (gameData.game_mode === '1v1') {
+        setCurrentBatterIndex(0);
+      } else {
+        const batterIndex = atBatsData.length % gamePlayersData.length;
+        setCurrentBatterIndex(batterIndex);
+      }
     }
 
     setLoading(false);
@@ -129,8 +140,11 @@ export default function GamePage() {
 
       setGame({ ...game, current_outs: newOuts, current_inning: newInning });
 
-      // Move to next batter
-      setCurrentBatterIndex((prev) => (prev + 1) % gamePlayers.length);
+      // Move to next batter only for co-op modes (2v2, 3v3)
+      // For 1v1, keep the same batter
+      if (game.game_mode !== '1v1') {
+        setCurrentBatterIndex((prev) => (prev + 1) % gamePlayers.length);
+      }
     }
 
     // Reset input state
@@ -144,7 +158,6 @@ export default function GamePage() {
     } else {
       // Record directly for non-RBI results
       setPendingResult(result);
-      // We'll confirm automatically for these
     }
   };
 
@@ -174,7 +187,20 @@ export default function GamePage() {
   };
 
   const endGame = async () => {
-    await supabase.from('games').update({ status: 'completed' }).eq('id', gameId);
+    if (ending) return;
+    setEnding(true);
+
+    // Build score string
+    const us = parseInt(ourScore) || 0;
+    const them = parseInt(theirScore) || 0;
+    const result = us > them ? 'W' : us < them ? 'L' : 'T';
+    const score = `${result} ${us}-${them}`;
+
+    await supabase
+      .from('games')
+      .update({ status: 'completed', score })
+      .eq('id', gameId);
+
     router.push(`/recap/${gameId}`);
   };
 
@@ -203,6 +229,80 @@ export default function GamePage() {
 
   return (
     <div className="min-h-screen pb-24" style={{ background: '#080D18' }}>
+      {/* End Game Modal */}
+      {showEndModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-5" style={{ background: 'rgba(0,0,0,0.8)' }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-sm rounded-xl p-5"
+            style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-[#EFF2FF]">Final Score</h2>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setShowEndModal(false)}
+                className="p-1"
+              >
+                <X size={20} color="#8A9BBB" />
+              </motion.button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                  Our Score
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={ourScore}
+                  onChange={(e) => setOurScore(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-4 py-3 rounded-lg text-xl font-bold text-center text-[#EFF2FF] placeholder-[#4A5772]"
+                  style={{ background: '#162035', border: '1px solid rgba(255,255,255,0.1)' }}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                  Their Score
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={theirScore}
+                  onChange={(e) => setTheirScore(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-4 py-3 rounded-lg text-xl font-bold text-center text-[#EFF2FF] placeholder-[#4A5772]"
+                  style={{ background: '#162035', border: '1px solid rgba(255,255,255,0.1)' }}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setShowEndModal(false)}
+                className="flex-1 py-3 rounded-xl font-semibold"
+                style={{ background: '#162035', color: '#8A9BBB', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                Cancel
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={endGame}
+                disabled={ending}
+                className="flex-1 py-3 rounded-xl font-semibold"
+                style={{ background: '#22C55E', color: '#080D18' }}
+              >
+                {ending ? 'Saving...' : 'Save & End'}
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Header */}
       <div
         className="sticky top-0 z-50 flex items-center gap-3 px-5 py-4"
@@ -219,7 +319,10 @@ export default function GamePage() {
         </Link>
         <div className="flex-1">
           <h1 className="font-display font-bold text-lg text-[#EFF2FF]">LIVE GAME</h1>
-          <div className="text-[11px] text-[#4A5772]">Inning {game.current_inning}</div>
+          <div className="text-[11px] text-[#4A5772]">
+            Inning {game.current_inning}
+            {game.game_mode === '1v1' && ' · Head to Head'}
+          </div>
         </div>
 
         {/* Outs indicator in header */}
@@ -474,7 +577,7 @@ export default function GamePage() {
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.97 }}
-            onClick={endGame}
+            onClick={() => setShowEndModal(true)}
             className="flex-1 py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
             style={{ background: '#EF4444', color: '#FFF' }}
           >
