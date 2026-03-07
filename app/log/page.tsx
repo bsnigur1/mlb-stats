@@ -82,32 +82,11 @@ function StartGameContent() {
     setStarting(true);
 
     try {
-      // Get or create today's session
       const today = new Date().toISOString().split('T')[0];
-      let sessionId: string;
 
-      // Check for existing active session
-      const { data: existingSessions } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('date', today)
-        .eq('is_active', true)
-        .limit(1);
-
-      if (existingSessions && existingSessions.length > 0) {
-        sessionId = existingSessions[0].id;
-        await supabase
-          .from('sessions')
-          .update({ last_activity: new Date().toISOString() })
-          .eq('id', sessionId);
-      } else {
-        const { data: newSession } = await supabase
-          .from('sessions')
-          .insert({ date: today, last_activity: new Date().toISOString(), is_active: true })
-          .select()
-          .single();
-        sessionId = newSession?.id;
-      }
+      // Always use the 2025 Season session for now
+      // TODO: Update this when 2026 season starts
+      const sessionId = 'a0000000-0000-0000-0000-000000000001';
 
       // Create game in 'in_progress' state
       const currentPlayerId = selectedPlayers[0];
