@@ -339,21 +339,67 @@ export default function SessionLog({ params }: { params: Promise<{ id: string }>
                 {wins > losses ? 'Winning session' : wins < losses ? 'Tough session' : 'Split session'}
               </div>
             </div>
-
-            {mvpPlayer && (
-              <div
-                className="flex items-center gap-3 px-4 py-3 rounded-lg"
-                style={{ background: 'rgba(240,180,41,0.08)', border: '1px solid rgba(240,180,41,0.2)' }}
-              >
-                <Trophy size={16} color="#F0B429" />
-                <div>
-                  <div className="text-[10px] text-[#F0B429] uppercase tracking-wide">Session MVP</div>
-                  <div className="text-sm font-semibold text-[#EFF2FF]">{mvpPlayer.name}</div>
-                </div>
-              </div>
-            )}
           </div>
         </motion.div>
+
+        {/* Session Totals */}
+        {(() => {
+          // Get all game IDs in this session
+          const sessionGameIds = new Set(games.map((g) => g.id));
+          const sessionAtBats = atBats.filter((ab) => sessionGameIds.has(ab.game_id));
+
+          // Get unique players who played in this session
+          const playerIdsInSession = new Set<string>();
+          games.forEach((g) => {
+            g.game_players?.forEach((gp) => playerIdsInSession.add(gp.player_id));
+          });
+
+          // Calculate stats per player for the entire session
+          const sessionPlayerStats = Array.from(playerIdsInSession).map((playerId) => {
+            const player = players.find((p) => p.id === playerId);
+            const playerAtBats = sessionAtBats.filter((ab) => ab.player_id === playerId);
+            const singles = playerAtBats.filter((ab) => ab.result === 'single').length;
+            const doubles = playerAtBats.filter((ab) => ab.result === 'double').length;
+            const triples = playerAtBats.filter((ab) => ab.result === 'triple').length;
+            const homeruns = playerAtBats.filter((ab) => ab.result === 'homerun').length;
+            const walks = playerAtBats.filter((ab) => ab.result === 'walk').length;
+            const strikeouts = playerAtBats.filter((ab) => ab.result === 'strikeout').length;
+            const outs = playerAtBats.filter((ab) => ab.result === 'out').length;
+            const rbi = playerAtBats.reduce((sum, ab) => sum + (ab.rbi || 0), 0);
+
+            const hits = singles + doubles + triples + homeruns;
+            const ab = hits + strikeouts + outs;
+
+            return {
+              player,
+              stats: { ab, h: hits, hr: homeruns, rbi, bb: walks, k: strikeouts },
+            };
+          });
+
+          if (sessionPlayerStats.length === 0) return null;
+
+          return (
+            <motion.div
+              custom={0.5}
+              variants={fadeUp}
+              initial="hidden"
+              animate="visible"
+              className="rounded-lg p-4"
+              style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
+            >
+              <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3">
+                Session Totals
+              </div>
+              <div className="space-y-1">
+                {sessionPlayerStats.map((ps) =>
+                  ps.player ? (
+                    <PlayerStatLine key={ps.player.id} player={ps.player} stats={ps.stats} />
+                  ) : null
+                )}
+              </div>
+            </motion.div>
+          );
+        })()}
 
         {/* Games timeline */}
         <div>
