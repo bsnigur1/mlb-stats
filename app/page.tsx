@@ -99,19 +99,24 @@ function ResultDot({ result }: { result: 'W' | 'L' }) {
   );
 }
 
-// Type badge
+// Type badge for game modes
 function TypeBadge({ type }: { type: string }) {
-  const isCoOp = type === 'CO-OP';
+  const config = {
+    '2v2': { bg: 'rgba(96,165,250,0.1)', color: '#60A5FA', border: 'rgba(96,165,250,0.2)', label: '2v2' },
+    '3v3': { bg: 'rgba(52,211,153,0.1)', color: '#34D399', border: 'rgba(52,211,153,0.2)', label: '3v3' },
+    '1v1': { bg: 'rgba(240,180,41,0.1)', color: '#F0B429', border: 'rgba(240,180,41,0.2)', label: 'H2H' },
+  }[type] || { bg: 'rgba(96,165,250,0.1)', color: '#60A5FA', border: 'rgba(96,165,250,0.2)', label: type };
+
   return (
     <span
       className="px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide"
       style={{
-        background: isCoOp ? 'rgba(96,165,250,0.1)' : 'rgba(240,180,41,0.1)',
-        color: isCoOp ? '#60A5FA' : '#F0B429',
-        border: `1px solid ${isCoOp ? 'rgba(96,165,250,0.2)' : 'rgba(240,180,41,0.2)'}`,
+        background: config.bg,
+        color: config.color,
+        border: `1px solid ${config.border}`,
       }}
     >
-      {type}
+      {config.label}
     </span>
   );
 }
@@ -244,7 +249,7 @@ function SessionCard({ session, index, games }: { session: Session; index: numbe
                           </span>
                         </span>
                         <span className="text-xs text-[#4A5772]">vs {game.opponent || 'Unknown'}</span>
-                        <TypeBadge type={game.game_type} />
+                        <TypeBadge type={game.game_mode} />
                       </div>
                     </div>
                     <div className="text-[11px] text-[#4A5772]">{game.innings} inn</div>

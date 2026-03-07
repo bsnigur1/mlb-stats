@@ -17,7 +17,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Player, Session, Game, GameType } from '@/lib/types';
+import { Player, Session, Game, GameMode } from '@/lib/types';
 
 // Animation variants
 const fadeUp = {
@@ -196,8 +196,9 @@ export default function LogGame() {
 
   // Form state
   const [mode, setMode] = useState<'quick' | 'full'>('quick');
-  const [gameType, setGameType] = useState<GameType>('CO-OP');
+  const [gameMode, setGameMode] = useState<GameMode>('2v2');
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
+  const [h2hOpponent, setH2hOpponent] = useState<string | null>(null); // For 1v1: who you played against
   const [opponent, setOpponent] = useState('');
   const [ourScore, setOurScore] = useState(0);
   const [theirScore, setTheirScore] = useState(0);
@@ -233,7 +234,16 @@ export default function LogGame() {
       setPlayers(playerData);
       setSessions(sessionsRes.data || []);
 
-      // Initialize all players as selected for CO-OP
+      // Check for active session within 2 hours
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const activeSession = sessionsRes.data?.find(
+        (s) => s.is_active && s.last_activity && s.last_activity > twoHoursAgo
+      );
+      if (activeSession) {
+        setSessionId(activeSession.id);
+      }
+
+      // Initialize all players as selected for co-op modes
       const allPlayerIds = playerData.map((p) => p.id);
       setSelectedPlayers(allPlayerIds);
 
@@ -263,11 +273,23 @@ export default function LogGame() {
         const today = new Date().toISOString().split('T')[0];
         const { data: newSession } = await supabase
           .from('sessions')
-          .insert({ date: today, label: newSessionLabel || null })
+          .insert({ date: today, label: newSessionLabel || null, last_activity: new Date().toISOString(), is_active: true })
           .select()
           .single();
         finalSessionId = newSession?.id || null;
+      } else {
+        // Update last_activity for existing session
+        await supabase
+          .from('sessions')
+          .update({ last_activity: new Date().toISOString() })
+          .eq('id', sessionId);
       }
+
+      // Determine winner for 1v1
+      const currentPlayerId = selectedPlayers[0]; // The player logging (you)
+      const h2hWinnerId = gameMode === '1v1' && h2hOpponent
+        ? (ourScore > theirScore ? currentPlayerId : ourScore < theirScore ? h2hOpponent : null)
+        : null;
 
       // Create game
       const { data: game } = await supabase
@@ -278,10 +300,13 @@ export default function LogGame() {
           status: 'completed',
           current_inning: innings,
           current_outs: 0,
-          opponent,
+          opponent: gameMode === '1v1' ? null : opponent,
           score: scoreDisplay,
           innings,
-          game_type: gameType,
+          game_mode: gameMode,
+          h2h_player1_id: gameMode === '1v1' ? currentPlayerId : null,
+          h2h_player2_id: gameMode === '1v1' ? h2hOpponent : null,
+          h2h_winner_id: h2hWinnerId,
           mvp_player_id: mvpPlayerId,
         })
         .select()
@@ -479,7 +504,7 @@ export default function LogGame() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.97 }}
           onClick={handleSave}
-          disabled={saving || selectedPlayers.length === 0}
+          disabled={saving || selectedPlayers.length === 0 || (gameMode === '1v1' && !h2hOpponent)}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
           style={{ background: '#F0B429', color: '#080D18' }}
         >
@@ -528,71 +553,154 @@ export default function LogGame() {
           )}
         </motion.div>
 
-        {/* Game type */}
+        {/* Game mode */}
         <motion.div custom={2} variants={fadeUp} initial="hidden" animate="visible">
-          <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">Game Type</label>
+          <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">Game Mode</label>
           <div className="flex gap-2">
-            <ToggleButton active={gameType === 'CO-OP'} onClick={() => setGameType('CO-OP')}>
+            <ToggleButton active={gameMode === '2v2'} onClick={() => { setGameMode('2v2'); setH2hOpponent(null); }}>
               <Users size={14} className="inline mr-1.5" />
-              CO-OP
+              2v2 Co-Op
             </ToggleButton>
-            <ToggleButton active={gameType === 'SOLO'} onClick={() => setGameType('SOLO')}>
+            <ToggleButton active={gameMode === '3v3'} onClick={() => { setGameMode('3v3'); setH2hOpponent(null); }}>
+              <Users size={14} className="inline mr-1.5" />
+              3v3 Co-Op
+            </ToggleButton>
+            <ToggleButton active={gameMode === '1v1'} onClick={() => setGameMode('1v1')}>
               <User size={14} className="inline mr-1.5" />
-              SOLO
+              1v1 H2H
             </ToggleButton>
           </div>
         </motion.div>
 
-        {/* Players */}
-        <motion.div custom={3} variants={fadeUp} initial="hidden" animate="visible">
-          <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">Players</label>
-          <div className="flex gap-2 flex-wrap">
-            {players.map((player) => (
-              <motion.button
-                key={player.id}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => togglePlayer(player.id)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
-                style={{
-                  background: selectedPlayers.includes(player.id) ? 'rgba(240,180,41,0.15)' : 'rgba(255,255,255,0.05)',
-                  border: `1px solid ${selectedPlayers.includes(player.id) ? 'rgba(240,180,41,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                  color: selectedPlayers.includes(player.id) ? '#F0B429' : '#8A9BBB',
-                }}
-              >
-                <div
-                  className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold"
-                  style={{ background: '#162035', color: '#8A9BBB' }}
-                >
-                  {player.name[0]}
-                </div>
-                {player.name}
-                {selectedPlayers.includes(player.id) && <Check size={12} />}
-              </motion.button>
-            ))}
-          </div>
-        </motion.div>
+        {/* 1v1 Opponent selection */}
+        {gameMode === '1v1' && (
+          <motion.div custom={2.5} variants={fadeUp} initial="hidden" animate="visible">
+            <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+              Who did you play?
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {players
+                .filter((p) => !selectedPlayers.includes(p.id) || selectedPlayers.length > 1)
+                .map((player) => (
+                  <motion.button
+                    key={player.id}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setH2hOpponent(player.id)}
+                    className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium"
+                    style={{
+                      background: h2hOpponent === player.id ? 'rgba(248,113,113,0.15)' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${h2hOpponent === player.id ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                      color: h2hOpponent === player.id ? '#F87171' : '#8A9BBB',
+                    }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
+                      style={{ background: '#162035', color: '#8A9BBB' }}
+                    >
+                      {player.name[0]}
+                    </div>
+                    {player.name}
+                    {h2hOpponent === player.id && <Check size={14} />}
+                  </motion.button>
+                ))}
+            </div>
+          </motion.div>
+        )}
 
-        {/* Opponent */}
-        <motion.div custom={4} variants={fadeUp} initial="hidden" animate="visible">
-          <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
-            <Target size={11} className="inline mr-1.5" />
-            Opponent
-          </label>
-          <input
-            type="text"
-            placeholder="Team name"
-            value={opponent}
-            onChange={(e) => setOpponent(e.target.value)}
-            className="w-full p-3 rounded-lg text-sm bg-[#0F1829] border border-white/10 text-[#EFF2FF] placeholder:text-[#4A5772]"
-          />
-        </motion.div>
+        {/* Players - for Co-Op modes */}
+        {(gameMode === '2v2' || gameMode === '3v3') && (
+          <motion.div custom={3} variants={fadeUp} initial="hidden" animate="visible">
+            <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+              Who played? ({gameMode === '2v2' ? 'Select 2' : 'Select 3'})
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {players.map((player) => (
+                <motion.button
+                  key={player.id}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => togglePlayer(player.id)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
+                  style={{
+                    background: selectedPlayers.includes(player.id) ? 'rgba(240,180,41,0.15)' : 'rgba(255,255,255,0.05)',
+                    border: `1px solid ${selectedPlayers.includes(player.id) ? 'rgba(240,180,41,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                    color: selectedPlayers.includes(player.id) ? '#F0B429' : '#8A9BBB',
+                  }}
+                >
+                  <div
+                    className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold"
+                    style={{ background: '#162035', color: '#8A9BBB' }}
+                  >
+                    {player.name[0]}
+                  </div>
+                  {player.name}
+                  {selectedPlayers.includes(player.id) && <Check size={12} />}
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Player - for 1v1 mode (who is logging) */}
+        {gameMode === '1v1' && (
+          <motion.div custom={3} variants={fadeUp} initial="hidden" animate="visible">
+            <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+              Who are you?
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {players.map((player) => (
+                <motion.button
+                  key={player.id}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    setSelectedPlayers([player.id]);
+                    if (h2hOpponent === player.id) setH2hOpponent(null);
+                  }}
+                  className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium"
+                  style={{
+                    background: selectedPlayers[0] === player.id ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.05)',
+                    border: `1px solid ${selectedPlayers[0] === player.id ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                    color: selectedPlayers[0] === player.id ? '#34D399' : '#8A9BBB',
+                  }}
+                >
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
+                    style={{ background: '#162035', color: '#8A9BBB' }}
+                  >
+                    {player.name[0]}
+                  </div>
+                  {player.name}
+                  {selectedPlayers[0] === player.id && <Check size={14} />}
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Opponent - only for co-op modes */}
+        {(gameMode === '2v2' || gameMode === '3v3') && (
+          <motion.div custom={4} variants={fadeUp} initial="hidden" animate="visible">
+            <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+              <Target size={11} className="inline mr-1.5" />
+              Opponent Team
+            </label>
+            <input
+              type="text"
+              placeholder="Team name (optional)"
+              value={opponent}
+              onChange={(e) => setOpponent(e.target.value)}
+              className="w-full p-3 rounded-lg text-sm bg-[#0F1829] border border-white/10 text-[#EFF2FF] placeholder:text-[#4A5772]"
+            />
+          </motion.div>
+        )}
 
         {/* Score */}
         <motion.div custom={5} variants={fadeUp} initial="hidden" animate="visible">
           <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 block">Final Score</label>
           <div className="flex items-center gap-4">
             <div className="flex-1 text-center">
-              <div className="text-[10px] text-[#4A5772] uppercase tracking-wide mb-2">Us</div>
+              <div className="text-[10px] text-[#4A5772] uppercase tracking-wide mb-2">
+                {gameMode === '1v1' ? (players.find(p => p.id === selectedPlayers[0])?.name || 'You') : 'Us'}
+              </div>
               <div className="flex items-center justify-center gap-3">
                 <motion.button
                   whileTap={{ scale: 0.9 }}
@@ -625,7 +733,9 @@ export default function LogGame() {
             </div>
 
             <div className="flex-1 text-center">
-              <div className="text-[10px] text-[#4A5772] uppercase tracking-wide mb-2">Them</div>
+              <div className="text-[10px] text-[#4A5772] uppercase tracking-wide mb-2">
+                {gameMode === '1v1' ? (players.find(p => p.id === h2hOpponent)?.name || 'Them') : 'Them'}
+              </div>
               <div className="flex items-center justify-center gap-3">
                 <motion.button
                   whileTap={{ scale: 0.9 }}
@@ -671,45 +781,47 @@ export default function LogGame() {
           </div>
         </motion.div>
 
-        {/* MVP */}
-        <motion.div custom={7} variants={fadeUp} initial="hidden" animate="visible">
-          <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
-            <Trophy size={11} className="inline mr-1.5" color="#F0B429" />
-            Game MVP
-          </label>
-          <div className="flex gap-2 flex-wrap">
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setMvpPlayerId(null)}
-              className="px-3 py-2 rounded-lg text-sm font-medium"
-              style={{
-                background: !mvpPlayerId ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
-                color: !mvpPlayerId ? '#EFF2FF' : '#4A5772',
-                border: '1px solid rgba(255,255,255,0.1)',
-              }}
-            >
-              None
-            </motion.button>
-            {players
-              .filter((p) => selectedPlayers.includes(p.id))
-              .map((player) => (
-                <motion.button
-                  key={player.id}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setMvpPlayerId(player.id)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
-                  style={{
-                    background: mvpPlayerId === player.id ? 'rgba(240,180,41,0.15)' : 'rgba(255,255,255,0.05)',
-                    border: `1px solid ${mvpPlayerId === player.id ? 'rgba(240,180,41,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                    color: mvpPlayerId === player.id ? '#F0B429' : '#8A9BBB',
-                  }}
-                >
-                  {mvpPlayerId === player.id && <Trophy size={12} />}
-                  {player.name}
-                </motion.button>
-              ))}
-          </div>
-        </motion.div>
+        {/* MVP - only for co-op modes */}
+        {(gameMode === '2v2' || gameMode === '3v3') && (
+          <motion.div custom={7} variants={fadeUp} initial="hidden" animate="visible">
+            <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+              <Trophy size={11} className="inline mr-1.5" color="#F0B429" />
+              Game MVP
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setMvpPlayerId(null)}
+                className="px-3 py-2 rounded-lg text-sm font-medium"
+                style={{
+                  background: !mvpPlayerId ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
+                  color: !mvpPlayerId ? '#EFF2FF' : '#4A5772',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                }}
+              >
+                None
+              </motion.button>
+              {players
+                .filter((p) => selectedPlayers.includes(p.id))
+                .map((player) => (
+                  <motion.button
+                    key={player.id}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setMvpPlayerId(player.id)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+                    style={{
+                      background: mvpPlayerId === player.id ? 'rgba(240,180,41,0.15)' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${mvpPlayerId === player.id ? 'rgba(240,180,41,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                      color: mvpPlayerId === player.id ? '#F0B429' : '#8A9BBB',
+                    }}
+                  >
+                    {mvpPlayerId === player.id && <Trophy size={12} />}
+                    {player.name}
+                  </motion.button>
+                ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Full mode: player stats */}
         {mode === 'full' && (

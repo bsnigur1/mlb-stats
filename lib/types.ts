@@ -12,7 +12,7 @@ export type AtBatResult =
 
 export type HeatStatus = 'hot' | 'cold' | 'neutral';
 export type GameResult = 'W' | 'L';
-export type GameType = 'CO-OP' | 'SOLO';
+export type GameMode = '2v2' | '3v3' | '1v1';
 export type AwardType = 'MVP_GAME' | 'MVP_SESSION' | 'MVP_WEEK' | 'SEASON_HIGH' | 'HOT_STREAK';
 
 export interface Player {
@@ -30,6 +30,8 @@ export interface Session {
   date: string;
   label: string | null;
   mvp_player_id: string | null;
+  last_activity: string;
+  is_active: boolean;
   created_at: string;
   // Relations
   games?: Game[];
@@ -46,7 +48,11 @@ export interface Game {
   opponent: string | null;
   score: string | null;
   innings: number;
-  game_type: GameType;
+  game_mode: GameMode;
+  // For 1v1 games - which players faced off
+  h2h_player1_id: string | null;
+  h2h_player2_id: string | null;
+  h2h_winner_id: string | null;
   mvp_player_id: string | null;
   created_at: string;
   // Relations
