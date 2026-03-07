@@ -3,29 +3,23 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+const PASSWORD = 'SnigurField';
+
 export default function LoginPage() {
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
-    const res = await fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-
-    if (res.ok) {
+    if (password === PASSWORD) {
+      document.cookie = 'mlb-auth=authenticated; path=/; max-age=2592000';
       router.push('/');
       router.refresh();
     } else {
       setError('Wrong password');
-      setLoading(false);
     }
   };
 
@@ -52,10 +46,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || !password}
+            disabled={!password}
             className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg font-semibold text-white transition-colors"
           >
-            {loading ? 'Checking...' : 'Enter'}
+            Enter
           </button>
         </form>
       </div>
