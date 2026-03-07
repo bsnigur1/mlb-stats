@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, BarChart2, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
+// Note: Link is still used for the back button
 import { supabase } from '@/lib/supabase';
-import { Player, AtBat, Game } from '@/lib/types';
+import { Player, AtBat, Game, Session } from '@/lib/types';
 
-type SortKey = 'name' | 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'h' | 'ab' | 'bb' | 'k' | 'kPercent';
+type SortKey = 'name' | 'games' | 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'h' | 'doubles' | 'triples' | 'ab' | 'bb' | 'kPercent';
 
 // Animation variants
 const fadeUp = {
@@ -19,75 +20,138 @@ const fadeUp = {
   }),
 };
 
+interface PlayerStats {
+  player: Player;
+  games: number;
+  ab: number;
+  h: number;
+  singles: number;
+  doubles: number;
+  triples: number;
+  hr: number;
+  rbi: number;
+  bb: number;
+  k: number;
+  avg: number;
+  obp: number;
+  slg: number;
+  ops: number;
+  kPercent: number;
+}
+
+function calculatePlayerStats(
+  player: Player,
+  atBats: AtBat[],
+  games: Game[]
+): PlayerStats {
+  const playerAtBats = atBats.filter((ab) => ab.player_id === player.id);
+  const singles = playerAtBats.filter((ab) => ab.result === 'single').length;
+  const doubles = playerAtBats.filter((ab) => ab.result === 'double').length;
+  const triples = playerAtBats.filter((ab) => ab.result === 'triple').length;
+  const homeruns = playerAtBats.filter((ab) => ab.result === 'homerun').length;
+  const walks = playerAtBats.filter((ab) => ab.result === 'walk').length;
+  const strikeouts = playerAtBats.filter((ab) => ab.result === 'strikeout').length;
+  const outs = playerAtBats.filter((ab) => ab.result === 'out').length;
+  const errors = playerAtBats.filter((ab) => ab.result === 'error').length;
+  const rbi = playerAtBats.reduce((sum, ab) => sum + (ab.rbi || 0), 0);
+
+  const hits = singles + doubles + triples + homeruns;
+  const ab = hits + strikeouts + outs;
+  const pa = ab + walks + errors;
+  const avg = ab > 0 ? hits / ab : 0;
+  const slg = ab > 0 ? (singles + doubles * 2 + triples * 3 + homeruns * 4) / ab : 0;
+  const obp = ab + walks > 0 ? (hits + walks) / (ab + walks) : 0;
+  const ops = obp + slg;
+  const kPercent = pa > 0 ? (strikeouts / pa) * 100 : 0;
+
+  const playerGames = games.filter((g) =>
+    g.game_players?.some((gp) => gp.player_id === player.id)
+  ).length;
+
+  return {
+    player,
+    games: playerGames,
+    ab,
+    h: hits,
+    singles,
+    doubles,
+    triples,
+    hr: homeruns,
+    rbi,
+    bb: walks,
+    k: strikeouts,
+    avg,
+    obp,
+    slg,
+    ops,
+    kPercent,
+  };
+}
+
 export default function StatsPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [atBats, setAtBats] = useState<AtBat[]>([]);
   const [games, setGames] = useState<Game[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('avg');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [activeSection, setActiveSection] = useState<'2025' | 'career'>('2025');
 
   useEffect(() => {
     async function loadData() {
-      const [playersRes, atBatsRes, gamesRes] = await Promise.all([
+      const [playersRes, gamesRes, sessionsRes] = await Promise.all([
         supabase.from('players').select('*'),
-        supabase.from('at_bats').select('*'),
-        supabase.from('games').select('*, game_players(*)'),
+        supabase.from('games').select('*, game_players(*)').limit(1000),
+        supabase.from('sessions').select('*'),
       ]);
 
+      // Fetch all at-bats (may be more than 1000)
+      let allAtBats: AtBat[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data: batch } = await supabase
+          .from('at_bats')
+          .select('*')
+          .range(offset, offset + batchSize - 1);
+        if (!batch || batch.length === 0) break;
+        allAtBats = [...allAtBats, ...batch];
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
+
       setPlayers(playersRes.data || []);
-      setAtBats(atBatsRes.data || []);
+      setAtBats(allAtBats);
       setGames(gamesRes.data || []);
+      setSessions(sessionsRes.data || []);
       setLoading(false);
     }
     loadData();
   }, []);
 
-  // Calculate stats for each player
-  const playerStats = players.map((player) => {
-    const playerAtBats = atBats.filter((ab) => ab.player_id === player.id);
-    const singles = playerAtBats.filter((ab) => ab.result === 'single').length;
-    const doubles = playerAtBats.filter((ab) => ab.result === 'double').length;
-    const triples = playerAtBats.filter((ab) => ab.result === 'triple').length;
-    const homeruns = playerAtBats.filter((ab) => ab.result === 'homerun').length;
-    const walks = playerAtBats.filter((ab) => ab.result === 'walk').length;
-    const strikeouts = playerAtBats.filter((ab) => ab.result === 'strikeout').length;
-    const outs = playerAtBats.filter((ab) => ab.result === 'out').length;
-    const errors = playerAtBats.filter((ab) => ab.result === 'error').length;
-    const rbi = playerAtBats.reduce((sum, ab) => sum + (ab.rbi || 0), 0);
+  // Find the 2025 historical session
+  const historicalSession = sessions.find((s) => s.label?.includes('2025') || s.id === 'a0000000-0000-0000-0000-000000000001');
 
-    const hits = singles + doubles + triples + homeruns;
-    const ab = hits + strikeouts + outs;
-    const pa = ab + walks + errors;
-    const avg = ab > 0 ? hits / ab : 0;
-    const slg = ab > 0 ? (singles + doubles * 2 + triples * 3 + homeruns * 4) / ab : 0;
-    const obp = ab + walks > 0 ? (hits + walks) / (ab + walks) : 0;
-    const ops = obp + slg;
-    const kPercent = pa > 0 ? (strikeouts / pa) * 100 : 0;
+  // Get games from 2025 season
+  const season2025Games = historicalSession
+    ? games.filter((g) => g.session_id === historicalSession.id)
+    : [];
+  const season2025GameIds = new Set(season2025Games.map((g) => g.id));
 
-    const playerGames = games.filter((g) =>
-      g.game_players?.some((gp) => gp.player_id === player.id)
-    ).length;
+  // Filter at-bats for 2025 season
+  const season2025AtBats = atBats.filter((ab) => season2025GameIds.has(ab.game_id));
 
-    return {
-      player,
-      games: playerGames,
-      ab,
-      h: hits,
-      singles,
-      doubles,
-      triples,
-      hr: homeruns,
-      rbi,
-      bb: walks,
-      k: strikeouts,
-      avg,
-      obp,
-      slg,
-      ops,
-      kPercent,
-    };
-  });
+  // Calculate stats based on active section
+  const getFilteredStats = () => {
+    if (activeSection === '2025') {
+      return players.map((player) => calculatePlayerStats(player, season2025AtBats, season2025Games));
+    }
+    // Career = all stats
+    return players.map((player) => calculatePlayerStats(player, atBats, games));
+  };
+
+  const playerStats = getFilteredStats();
 
   // Sort players
   const sortedPlayers = [...playerStats].sort((a, b) => {
@@ -125,16 +189,15 @@ export default function StatsPage() {
 
   const columns: { key: SortKey; label: string; format?: (v: number) => string }[] = [
     { key: 'name', label: 'Player' },
-    { key: 'ab', label: 'AB' },
-    { key: 'h', label: 'H' },
+    { key: 'games', label: 'G' },
+    { key: 'avg', label: 'AVG', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
+    { key: 'ops', label: 'OPS', format: (v) => v.toFixed(3) },
     { key: 'hr', label: 'HR' },
     { key: 'rbi', label: 'RBI' },
+    { key: 'h', label: 'H' },
+    { key: 'doubles', label: '2B' },
+    { key: 'triples', label: '3B' },
     { key: 'bb', label: 'BB' },
-    { key: 'k', label: 'K' },
-    { key: 'avg', label: 'AVG', format: (v) => `.${String(Math.round(v * 1000)).padStart(3, '0')}` },
-    { key: 'obp', label: 'OBP', format: (v) => `.${String(Math.round(v * 1000)).padStart(3, '0')}` },
-    { key: 'slg', label: 'SLG', format: (v) => `.${String(Math.round(v * 1000)).padStart(3, '0')}` },
-    { key: 'ops', label: 'OPS', format: (v) => v.toFixed(3) },
     { key: 'kPercent', label: 'K%', format: (v) => `${v.toFixed(1)}%` },
   ];
 
@@ -155,13 +218,40 @@ export default function StatsPage() {
           </motion.div>
         </Link>
         <div className="flex-1">
-          <h1 className="font-display font-bold text-lg text-[#EFF2FF]">CAREER STATS</h1>
-          <div className="text-xs text-[#4A5772]">All-time batting statistics</div>
+          <h1 className="font-display font-bold text-lg text-[#EFF2FF]">STATS</h1>
+          <div className="text-xs text-[#4A5772]">Batting statistics</div>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto p-5">
+        {/* Section Tabs */}
+        <div className="flex gap-2 mb-5">
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setActiveSection('2025')}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+            style={{
+              background: activeSection === '2025' ? '#60A5FA' : '#162035',
+              color: activeSection === '2025' ? '#080D18' : '#8A9BBB',
+            }}
+          >
+            2025 Season
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setActiveSection('career')}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+            style={{
+              background: activeSection === 'career' ? '#F0B429' : '#162035',
+              color: activeSection === 'career' ? '#080D18' : '#8A9BBB',
+            }}
+          >
+            Career Stats
+          </motion.button>
+        </div>
+
         <motion.div
+          key={activeSection}
           custom={0}
           variants={fadeUp}
           initial="hidden"
@@ -202,38 +292,31 @@ export default function StatsPage() {
                   style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
                 >
                   <td className="px-3 py-3">
-                    <Link href={`/players/${ps.player.id}`}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
-                          style={{ background: '#162035', color: '#8A9BBB' }}
-                        >
-                          {ps.player.name[0]}
-                        </div>
-                        <span className="text-sm font-medium text-[#EFF2FF] hover:text-[#60A5FA]">
-                          {ps.player.name}
-                        </span>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
+                        style={{ background: '#162035', color: '#8A9BBB' }}
+                      >
+                        {ps.player.name[0]}
                       </div>
-                    </Link>
+                      <span className="text-sm font-medium text-[#EFF2FF]">
+                        {ps.player.name}
+                      </span>
+                    </div>
                   </td>
-                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.ab}</td>
-                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.h}</td>
-                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.hr}</td>
-                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.rbi}</td>
-                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.bb}</td>
-                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.k}</td>
+                  <td className="px-3 py-3 text-sm text-[#8A9BBB] text-right tabular-nums">{ps.games}</td>
                   <td className="px-3 py-3 text-sm text-[#F0B429] text-right tabular-nums font-bold">
                     {columns.find((c) => c.key === 'avg')?.format?.(ps.avg)}
                   </td>
                   <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">
-                    {columns.find((c) => c.key === 'obp')?.format?.(ps.obp)}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">
-                    {columns.find((c) => c.key === 'slg')?.format?.(ps.slg)}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">
                     {ps.ops.toFixed(3)}
                   </td>
+                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.hr}</td>
+                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.rbi}</td>
+                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.h}</td>
+                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.doubles}</td>
+                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.triples}</td>
+                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.bb}</td>
                   <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">
                     {ps.kPercent.toFixed(1)}%
                   </td>
@@ -243,13 +326,13 @@ export default function StatsPage() {
           </table>
         </motion.div>
 
-        {players.length === 0 && (
+        {playerStats.every((ps) => ps.ab === 0) && (
           <div
-            className="text-center py-12 rounded-lg"
+            className="text-center py-12 rounded-lg mt-5"
             style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
           >
             <BarChart2 size={32} color="#4A5772" className="mx-auto mb-3" />
-            <div className="text-[#4A5772] text-sm">No stats yet</div>
+            <div className="text-[#4A5772] text-sm">No stats for {activeSection === '2025' ? '2025 Season' : 'Career'}</div>
             <div className="text-xs text-[#4A5772] mt-1">Start logging games to see statistics!</div>
           </div>
         )}

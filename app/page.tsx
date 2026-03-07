@@ -10,7 +10,6 @@ import {
   Calendar,
   BarChart2,
   ArrowLeftRight,
-  User,
   ChevronRight,
   Home,
   BookOpen,
@@ -127,52 +126,47 @@ function PlayerRow({ player, rank, index, stats }: { player: Player; rank: numbe
   const isCold = player.heat === 'cold';
 
   return (
-    <Link href={`/players/${player.id}`}>
-      <motion.div
-        custom={index}
-        variants={fadeUp}
-        initial="hidden"
-        animate="visible"
-        whileHover={{ x: 2 }}
-        className="flex items-center gap-3 p-3.5 rounded-lg cursor-pointer relative overflow-hidden pinstripe"
-        style={{
-          background: '#0F1829',
-          border: `1px solid ${isHot ? 'rgba(240,180,41,0.2)' : 'rgba(255,255,255,0.07)'}`,
-          borderLeft: `3px solid ${isHot ? '#F0B429' : isCold ? '#374151' : 'rgba(255,255,255,0.07)'}`,
-          boxShadow: isHot ? '0 0 12px rgba(240,180,41,0.08)' : 'none',
-        }}
+    <motion.div
+      custom={index}
+      variants={fadeUp}
+      initial="hidden"
+      animate="visible"
+      className="flex items-center gap-3 p-3.5 rounded-lg relative overflow-hidden pinstripe"
+      style={{
+        background: '#0F1829',
+        border: `1px solid ${isHot ? 'rgba(240,180,41,0.2)' : 'rgba(255,255,255,0.07)'}`,
+        borderLeft: `3px solid ${isHot ? '#F0B429' : isCold ? '#374151' : 'rgba(255,255,255,0.07)'}`,
+        boxShadow: isHot ? '0 0 12px rgba(240,180,41,0.08)' : 'none',
+      }}
+    >
+      <span className="text-xs font-bold tabular-nums min-w-4" style={{ color: rank === 1 ? '#F0B429' : '#4A5772' }}>
+        {rank}
+      </span>
+
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0"
+        style={{ background: 'linear-gradient(135deg, #162035 0%, #1A2640 100%)', color: '#8A9BBB' }}
       >
-        <span className="text-xs font-bold tabular-nums min-w-4" style={{ color: rank === 1 ? '#F0B429' : '#4A5772' }}>
-          {rank}
+        {player.name[0]}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-sm font-semibold text-[#EFF2FF]">{player.name}</span>
+          <HeatBadge heat={player.heat} streak={player.streak} streakType={player.streak_type} />
+        </div>
+        <span className="text-xs text-[#4A5772]">
+          {stats.wins}W–{stats.losses}L
         </span>
+      </div>
 
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg, #162035 0%, #1A2640 100%)', color: '#8A9BBB' }}
-        >
-          {player.name[0]}
+      <div className="text-right">
+        <div className="text-xl font-bold text-[#EFF2FF] tabular-nums leading-none">
+          .{String(Math.round(stats.avg * 1000)).padStart(3, '0')}
         </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-sm font-semibold text-[#EFF2FF]">{player.name}</span>
-            <HeatBadge heat={player.heat} streak={player.streak} streakType={player.streak_type} />
-          </div>
-          <span className="text-xs text-[#4A5772]">
-            {stats.wins}W–{stats.losses}L
-          </span>
-        </div>
-
-        <div className="text-right">
-          <div className="text-xl font-bold text-[#EFF2FF] tabular-nums leading-none">
-            .{String(Math.round(stats.avg * 1000)).padStart(3, '0')}
-          </div>
-          <div className="text-[10px] text-[#4A5772] uppercase tracking-wide mt-0.5">AVG</div>
-        </div>
-
-        <ChevronRight size={14} color="#4A5772" />
-      </motion.div>
-    </Link>
+        <div className="text-[10px] text-[#4A5772] uppercase tracking-wide mt-0.5">AVG</div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -291,9 +285,9 @@ function LeaderCard({ label, player, value, index }: { label: string; player: st
 const NAV_ITEMS = [
   { icon: Home, label: 'Dashboard', href: '/', active: true },
   { icon: BookOpen, label: 'Sessions', href: '/sessions', active: false },
-  { icon: User, label: 'Players', href: '/players', active: false },
-  { icon: Trophy, label: 'Awards', href: '/awards', active: false },
   { icon: BarChart2, label: 'Stats', href: '/stats', active: false },
+  { icon: ArrowLeftRight, label: 'Head-to-Head', href: '/h2h', active: false },
+  { icon: Trophy, label: 'Awards', href: '/awards', active: false },
 ];
 
 // Sidebar
@@ -427,17 +421,31 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function loadData() {
-      const [playersRes, sessionsRes, gamesRes, atBatsRes] = await Promise.all([
+      const [playersRes, sessionsRes, gamesRes] = await Promise.all([
         supabase.from('players').select('*'),
         supabase.from('sessions').select('*').order('date', { ascending: false }).limit(5),
-        supabase.from('games').select('*').order('created_at', { ascending: false }),
-        supabase.from('at_bats').select('*'),
+        supabase.from('games').select('*').order('created_at', { ascending: false }).limit(500),
       ]);
+
+      // Fetch all at-bats (may be more than 1000)
+      let allAtBats: AtBat[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data: batch } = await supabase
+          .from('at_bats')
+          .select('*')
+          .range(offset, offset + batchSize - 1);
+        if (!batch || batch.length === 0) break;
+        allAtBats = [...allAtBats, ...batch];
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
 
       setPlayers(playersRes.data || []);
       setSessions(sessionsRes.data || []);
       setGames(gamesRes.data || []);
-      setAtBats(atBatsRes.data || []);
+      setAtBats(allAtBats);
       setLoading(false);
     }
     loadData();

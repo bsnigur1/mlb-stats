@@ -218,7 +218,7 @@ export default function SessionLog({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => {
     async function loadData() {
-      const [sessionRes, gamesRes, playersRes, atBatsRes] = await Promise.all([
+      const [sessionRes, gamesRes, playersRes] = await Promise.all([
         supabase.from('sessions').select('*').eq('id', id).single(),
         supabase
           .from('games')
@@ -226,14 +226,28 @@ export default function SessionLog({ params }: { params: Promise<{ id: string }>
           .eq('session_id', id)
           .order('created_at', { ascending: true }),
         supabase.from('players').select('*'),
-        supabase.from('at_bats').select('*'),
       ]);
+
+      // Fetch all at-bats (may be more than 1000)
+      let allAtBats: AtBat[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data: batch } = await supabase
+          .from('at_bats')
+          .select('*')
+          .range(offset, offset + batchSize - 1);
+        if (!batch || batch.length === 0) break;
+        allAtBats = [...allAtBats, ...batch];
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
 
       const sessionData = sessionRes.data;
       setSession(sessionData);
       setGames(gamesRes.data || []);
       setPlayers(playersRes.data || []);
-      setAtBats(atBatsRes.data || []);
+      setAtBats(allAtBats);
 
       // Get MVP player if set
       if (sessionData?.mvp_player_id) {

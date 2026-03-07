@@ -246,17 +246,31 @@ function HeadToHeadContent() {
 
   useEffect(() => {
     async function loadData() {
-      const [playersRes, atBatsRes, gamesRes] = await Promise.all([
+      const [playersRes, gamesRes] = await Promise.all([
         supabase.from('players').select('*'),
-        supabase.from('at_bats').select('*'),
         supabase.from('games').select('*').eq('game_mode', '1v1').eq('status', 'completed'),
       ]);
+
+      // Fetch all at-bats (may be more than 1000)
+      let allAtBats: AtBat[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data: batch } = await supabase
+          .from('at_bats')
+          .select('*')
+          .range(offset, offset + batchSize - 1);
+        if (!batch || batch.length === 0) break;
+        allAtBats = [...allAtBats, ...batch];
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
 
       const playerData = playersRes.data || [];
       const gameData = gamesRes.data || [];
 
       setPlayers(playerData);
-      setAtBats(atBatsRes.data || []);
+      setAtBats(allAtBats);
       setH2hGames(gameData);
 
       // Build matchup records
