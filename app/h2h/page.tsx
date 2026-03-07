@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowLeftRight, ChevronDown, Trophy } from 'lucide-react';
 import Link from 'next/link';
@@ -14,7 +14,7 @@ const fadeUp = {
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.05, duration: 0.25, ease: 'easeOut' },
+    transition: { delay: i * 0.05, duration: 0.25, ease: 'easeOut' as const },
   }),
 };
 
@@ -140,7 +140,7 @@ function PlayerSelector({
   );
 }
 
-export default function HeadToHead() {
+function HeadToHeadContent() {
   const searchParams = useSearchParams();
   const [players, setPlayers] = useState<Player[]>([]);
   const [atBats, setAtBats] = useState<AtBat[]>([]);
@@ -392,5 +392,13 @@ export default function HeadToHead() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function HeadToHead() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center" style={{ background: '#080D18' }}><div className="text-[#4A5772]">Loading...</div></div>}>
+      <HeadToHeadContent />
+    </Suspense>
   );
 }

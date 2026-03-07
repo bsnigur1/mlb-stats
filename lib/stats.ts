@@ -1,11 +1,11 @@
-import { AtBat, PlayerStats } from './types';
+import { AtBat, GamePlayerStats } from './types';
 
 export function calculateStats(
   playerId: string,
   playerName: string,
   atBats: AtBat[],
   gamesPlayed: number = 1
-): PlayerStats {
+): GamePlayerStats {
   const playerAtBats = atBats.filter((ab) => ab.player_id === playerId);
 
   const singles = playerAtBats.filter((ab) => ab.result === 'single').length;

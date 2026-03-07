@@ -15,7 +15,7 @@ const fadeUp = {
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.05, duration: 0.25, ease: 'easeOut' },
+    transition: { delay: i * 0.05, duration: 0.25, ease: 'easeOut' as const },
   }),
 };
 
@@ -131,11 +131,11 @@ export default function StatsPage() {
     { key: 'rbi', label: 'RBI' },
     { key: 'bb', label: 'BB' },
     { key: 'k', label: 'K' },
-    { key: 'avg', label: 'AVG', format: (v) => \`.\${String(Math.round(v * 1000)).padStart(3, '0')}\` },
-    { key: 'obp', label: 'OBP', format: (v) => \`.\${String(Math.round(v * 1000)).padStart(3, '0')}\` },
-    { key: 'slg', label: 'SLG', format: (v) => \`.\${String(Math.round(v * 1000)).padStart(3, '0')}\` },
+    { key: 'avg', label: 'AVG', format: (v) => `.${String(Math.round(v * 1000)).padStart(3, '0')}` },
+    { key: 'obp', label: 'OBP', format: (v) => `.${String(Math.round(v * 1000)).padStart(3, '0')}` },
+    { key: 'slg', label: 'SLG', format: (v) => `.${String(Math.round(v * 1000)).padStart(3, '0')}` },
     { key: 'ops', label: 'OPS', format: (v) => v.toFixed(3) },
-    { key: 'kPercent', label: 'K%', format: (v) => \`\${v.toFixed(1)}%\` },
+    { key: 'kPercent', label: 'K%', format: (v) => `${v.toFixed(1)}%` },
   ];
 
   return (
@@ -202,7 +202,7 @@ export default function StatsPage() {
                   style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
                 >
                   <td className="px-3 py-3">
-                    <Link href={\`/players/\${ps.player.id}\`}>
+                    <Link href={`/players/${ps.player.id}`}>
                       <div className="flex items-center gap-2">
                         <div
                           className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"

@@ -29,7 +29,7 @@ const fadeUp = {
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.07, duration: 0.3, ease: 'easeOut' },
+    transition: { delay: i * 0.07, duration: 0.3, ease: 'easeOut' as const },
   }),
 };
 
@@ -227,7 +227,7 @@ function SessionCard({ session, index, games }: { session: Session; index: numbe
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            transition={{ duration: 0.25, ease: 'easeOut' as const }}
             className="overflow-hidden"
           >
             <div className="border-t border-white/5 py-2">
