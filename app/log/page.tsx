@@ -337,8 +337,12 @@ export default function LogGame() {
 
       if (!game) throw new Error('Failed to create game');
 
-      // Add game players
-      const gamePlayers = selectedPlayers.map((playerId, idx) => ({
+      // Add game players - for 1v1, include both players
+      const playerIdsToAdd = gameMode === '1v1' && h2hOpponent
+        ? [currentPlayerId, h2hOpponent]
+        : selectedPlayers;
+
+      const gamePlayers = playerIdsToAdd.map((playerId, idx) => ({
         game_id: game.id,
         player_id: playerId,
         batting_order: idx + 1,
@@ -361,7 +365,12 @@ export default function LogGame() {
           strikeouts_pitched: number;
         }[] = [];
 
-        for (const playerId of selectedPlayers) {
+        // For 1v1, include both players' stats
+        const playersToProcess = gameMode === '1v1' && h2hOpponent
+          ? [currentPlayerId, h2hOpponent]
+          : selectedPlayers;
+
+        for (const playerId of playersToProcess) {
           const stats = playerStats[playerId];
           if (!stats) continue;
 
@@ -849,10 +858,18 @@ export default function LogGame() {
         {/* Full mode: player stats */}
         {mode === 'full' && (
           <motion.div custom={8} variants={fadeUp} initial="hidden" animate="visible">
-            <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 block">Player Stats</label>
+            <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 block">
+              {gameMode === '1v1' ? 'Both Players Stats' : 'Player Stats'}
+            </label>
             <div className="space-y-2">
               {players
-                .filter((p) => selectedPlayers.includes(p.id))
+                .filter((p) => {
+                  // For 1v1, show both the selected player and opponent
+                  if (gameMode === '1v1') {
+                    return p.id === selectedPlayers[0] || p.id === h2hOpponent;
+                  }
+                  return selectedPlayers.includes(p.id);
+                })
                 .map((player, i) => (
                   <PlayerStatCard
                     key={player.id}

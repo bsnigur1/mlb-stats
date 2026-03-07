@@ -315,9 +315,21 @@ function HeadToHeadContent() {
     setTab('stats');
   };
 
-  // Calculate stats for a player (from Co-Op games only for fair comparison)
-  const getPlayerStats = (playerId: string) => {
-    const playerAtBats = atBats.filter((ab) => ab.player_id === playerId);
+  // Calculate stats for a player FROM ONLY their H2H games against the other player
+  const getPlayerStats = (playerId: string, opponentId: string) => {
+    // Find all 1v1 games between these two players
+    const matchupGames = h2hGames.filter((game) => {
+      const players = [game.h2h_player1_id, game.h2h_player2_id];
+      return players.includes(playerId) && players.includes(opponentId);
+    });
+
+    // Get game IDs
+    const matchupGameIds = new Set(matchupGames.map((g) => g.id));
+
+    // Filter at-bats to only include those from matchup games for this player
+    const playerAtBats = atBats.filter(
+      (ab) => ab.player_id === playerId && matchupGameIds.has(ab.game_id)
+    );
 
     const singles = playerAtBats.filter((ab) => ab.result === 'single').length;
     const doubles = playerAtBats.filter((ab) => ab.result === 'double').length;
@@ -338,7 +350,7 @@ function HeadToHeadContent() {
     const kPercent = pa > 0 ? (strikeouts / pa) * 100 : 0;
 
     return {
-      games: new Set(playerAtBats.map((ab) => ab.game_id)).size,
+      games: matchupGames.length,
       ab,
       hits,
       singles,
@@ -375,8 +387,9 @@ function HeadToHeadContent() {
 
   const player1 = players.find((p) => p.id === player1Id);
   const player2 = players.find((p) => p.id === player2Id);
-  const stats1 = player1Id ? getPlayerStats(player1Id) : null;
-  const stats2 = player2Id ? getPlayerStats(player2Id) : null;
+  // Only calculate stats if both players are selected (to filter by their matchup)
+  const stats1 = player1Id && player2Id ? getPlayerStats(player1Id, player2Id) : null;
+  const stats2 = player1Id && player2Id ? getPlayerStats(player2Id, player1Id) : null;
   const selectedMatchup = getSelectedMatchup();
 
   // Count advantages
@@ -558,8 +571,23 @@ function HeadToHeadContent() {
               </motion.div>
             )}
 
+            {/* No stats message */}
+            {stats1 && stats2 && stats1.ab === 0 && stats2.ab === 0 && selectedMatchup && selectedMatchup.games.length > 0 && (
+              <motion.div
+                custom={3.5}
+                variants={fadeUp}
+                initial="hidden"
+                animate="visible"
+                className="text-center py-6 rounded-lg"
+                style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
+              >
+                <div className="text-[#4A5772] text-sm mb-1">No batting stats recorded yet</div>
+                <div className="text-[#4A5772] text-xs">Log games with "Full Stats" mode to track H2H batting</div>
+              </motion.div>
+            )}
+
             {/* Stats comparison */}
-            {stats1 && stats2 && (
+            {stats1 && stats2 && (stats1.ab > 0 || stats2.ab > 0) && (
               <motion.div
                 custom={4}
                 variants={fadeUp}
@@ -578,7 +606,7 @@ function HeadToHeadContent() {
                       {player1?.name[0]}
                     </div>
                     <div className="text-sm font-semibold text-[#EFF2FF]">{player1?.name}</div>
-                    <div className="text-xs text-[#4A5772]">{stats1.games} games</div>
+                    <div className="text-xs text-[#4A5772]">{stats1.games} H2H games</div>
                   </div>
                   <div className="px-4">
                     <div className="text-[11px] text-[#4A5772] uppercase tracking-widest">VS</div>
@@ -591,14 +619,14 @@ function HeadToHeadContent() {
                       {player2?.name[0]}
                     </div>
                     <div className="text-sm font-semibold text-[#EFF2FF]">{player2?.name}</div>
-                    <div className="text-xs text-[#4A5772]">{stats2.games} games</div>
+                    <div className="text-xs text-[#4A5772]">{stats2.games} H2H games</div>
                   </div>
                 </div>
 
                 {/* Stats */}
                 <div className="p-4">
                   <div className="text-[10px] text-[#4A5772] uppercase tracking-widest mb-2 text-center">
-                    All-Time Batting
+                    H2H Batting Stats
                   </div>
                   <StatRow label="AVG" value1={stats1.avg} value2={stats2.avg} format="avg" />
                   <StatRow label="OPS" value1={stats1.ops} value2={stats2.ops} />
