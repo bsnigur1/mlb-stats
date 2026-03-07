@@ -1,3 +1,5 @@
+// The Yard — Type Definitions
+
 export type AtBatResult =
   | 'out'
   | 'strikeout'
@@ -8,19 +10,49 @@ export type AtBatResult =
   | 'homerun'
   | 'error';
 
+export type HeatStatus = 'hot' | 'cold' | 'neutral';
+export type GameResult = 'W' | 'L';
+export type GameType = 'CO-OP' | 'SOLO';
+export type AwardType = 'MVP_GAME' | 'MVP_SESSION' | 'MVP_WEEK' | 'SEASON_HIGH' | 'HOT_STREAK';
+
 export interface Player {
   id: string;
   name: string;
+  handle: string | null;
+  heat: HeatStatus;
+  streak: number;
+  streak_type: 'W' | 'L';
   created_at: string;
+}
+
+export interface Session {
+  id: string;
+  date: string;
+  label: string | null;
+  mvp_player_id: string | null;
+  created_at: string;
+  // Relations
+  games?: Game[];
+  mvp_player?: Player;
 }
 
 export interface Game {
   id: string;
+  session_id: string | null;
   date: string;
   status: 'in_progress' | 'completed';
   current_inning: number;
   current_outs: number;
+  opponent: string | null;
+  score: string | null;
+  innings: number;
+  game_type: GameType;
+  mvp_player_id: string | null;
   created_at: string;
+  // Relations
+  game_players?: GamePlayer[];
+  at_bats?: AtBat[];
+  mvp_player?: Player;
 }
 
 export interface GamePlayer {
@@ -38,13 +70,31 @@ export interface AtBat {
   inning: number;
   result: AtBatResult;
   rbi: number;
+  // Pitching stats (optional)
+  innings_pitched: number;
+  hits_allowed: number;
+  runs_allowed: number;
+  earned_runs: number;
+  walks_allowed: number;
+  strikeouts_pitched: number;
   created_at: string;
   player?: Player;
 }
 
-export interface PlayerStats {
+export interface Award {
+  id: string;
   player_id: string;
-  player_name: string;
+  type: AwardType;
+  label: string | null;
+  session_id: string | null;
+  game_id: string | null;
+  date: string;
+  created_at: string;
+  player?: Player;
+}
+
+// Computed stats interfaces
+export interface BattingStats {
   games: number;
   plate_appearances: number;
   at_bats: number;
@@ -58,15 +108,43 @@ export interface PlayerStats {
   errors: number;
   rbi: number;
   avg: number;
-  slg: number;
   obp: number;
+  slg: number;
   ops: number;
   k_percent: number;
   ab_per_hr: number | null;
   rbi_per_ab: number;
 }
 
-export interface GameWithPlayers extends Game {
-  game_players: (GamePlayer & { player: Player })[];
-  at_bats: AtBat[];
+export interface PitchingStats {
+  games: number;
+  wins: number;
+  losses: number;
+  innings_pitched: number;
+  hits_allowed: number;
+  runs_allowed: number;
+  earned_runs: number;
+  walks: number;
+  strikeouts: number;
+  era: number;
+  whip: number;
+}
+
+export interface PlayerStats {
+  player_id: string;
+  player_name: string;
+  player_handle: string | null;
+  heat: HeatStatus;
+  streak: number;
+  streak_type: 'W' | 'L';
+  batting: BattingStats;
+  pitching: PitchingStats;
+}
+
+// Session with computed data
+export interface SessionWithGames extends Session {
+  games: (Game & {
+    game_players: (GamePlayer & { player: Player })[];
+    at_bats: AtBat[];
+  })[];
 }

@@ -4,126 +4,168 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* The Yard Design System */
+@layer base {
+  :root {
+    /* Background colors */
+    --bg-base: #080D18;
+    --bg-surface: #0F1829;
+    --bg-elevated: #162035;
+
+    /* Text colors */
+    --text-primary: #EFF2FF;
+    --text-secondary: #8A9BBB;
+    --text-muted: #4A5772;
+
+    /* Accent colors */
+    --accent-gold: #F0B429;
+    --accent-green: #34D399;
+    --accent-red: #F87171;
+    --accent-blue: #60A5FA;
+
+    /* Border */
+    --border-subtle: rgba(255,255,255,0.07);
+
+    /* shadcn overrides */
+    --background: #080D18;
+    --foreground: #EFF2FF;
+    --card: #0F1829;
+    --card-foreground: #EFF2FF;
+    --popover: #162035;
+    --popover-foreground: #EFF2FF;
+    --primary: #F0B429;
+    --primary-foreground: #080D18;
+    --secondary: #162035;
+    --secondary-foreground: #EFF2FF;
+    --muted: #0F1829;
+    --muted-foreground: #4A5772;
+    --accent: #162035;
+    --accent-foreground: #EFF2FF;
+    --destructive: #F87171;
+    --border: rgba(255,255,255,0.07);
+    --input: rgba(255,255,255,0.07);
+    --ring: #F0B429;
+    --radius: 0.5rem;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Barlow Condensed', sans-serif;
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
-
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.58 0.22 27);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.87 0.00 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
   }
+
   body {
-    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  html {
-    @apply font-sans;
+
+  button {
+    font-family: inherit;
   }
+
+  /* Tabular numbers for stats */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+  }
+
+  /* Pinstripe texture for cards */
+  .pinstripe {
+    background-image: repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 11px,
+      rgba(255,255,255,0.018) 11px,
+      rgba(255,255,255,0.018) 12px
+    );
+  }
+
+  /* Hot player glow */
+  .glow-gold {
+    box-shadow: 0 0 16px rgba(240,180,41,0.12);
+  }
+}
+
+/* Utility classes for The Yard */
+@layer utilities {
+  .font-display {
+    font-family: 'Barlow Condensed', sans-serif;
+  }
+
+  .text-gold { color: var(--accent-gold); }
+  .text-green { color: var(--accent-green); }
+  .text-red { color: var(--accent-red); }
+  .text-blue { color: var(--accent-blue); }
+
+  .bg-base { background-color: var(--bg-base); }
+  .bg-surface { background-color: var(--bg-surface); }
+  .bg-elevated { background-color: var(--bg-elevated); }
+
+  .border-subtle { border-color: var(--border-subtle); }
+  .border-gold { border-color: rgba(240,180,41,0.25); }
+
+  /* Result colors */
+  .result-win { color: var(--accent-green); }
+  .result-loss { color: var(--accent-red); }
+}
+
+/* Responsive breakpoints */
+@media (max-width: 768px) {
+  .sidebar { display: none !important; }
+  .main-content { padding-bottom: 72px !important; }
+  .top-bar { display: flex !important; }
+}
+
+@media (min-width: 769px) {
+  .bottom-nav { display: none !important; }
+  .top-bar { display: none !important; }
+}
+
+@media (max-width: 640px) {
+  .leader-row { flex-direction: column !important; }
+  .player-stats-row { flex-direction: column !important; }
 }

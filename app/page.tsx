@@ -1,163 +1,549 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  TrendingUp,
+  Zap,
+  Award,
+  Plus,
+  Calendar,
+  BarChart2,
+  ArrowLeftRight,
+  User,
+  ChevronRight,
+  Home,
+  BookOpen,
+  Trophy,
+  Settings,
+  Minus,
+} from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Player, Game } from '@/lib/types';
+import { Player, Session, Game, GamePlayer, AtBat } from '@/lib/types';
 
-const PLAYERS = ['B', 'Greg', 'Andrew'];
+// Animation variants
+const fadeUp = {
+  hidden: { opacity: 0, y: 16 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.07, duration: 0.3, ease: 'easeOut' },
+  }),
+};
 
-export default function Home() {
+// Logo component
+function YardLogo({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <svg width={compact ? 18 : 22} height={compact ? 18 : 22} viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="3" width="18" height="18" rx="3" transform="rotate(45 12 12)" fill="#F0B429" />
+        <rect x="5.5" y="5.5" width="13" height="13" rx="2" transform="rotate(45 12 12)" fill="none" stroke="rgba(8,13,24,0.5)" strokeWidth="1.5" />
+      </svg>
+      {!compact && (
+        <span className="font-display font-bold text-xl tracking-widest text-[#EFF2FF]">
+          THE YARD
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Heat badge component
+function HeatBadge({ heat, streak, streakType }: { heat: string; streak: number; streakType: string }) {
+  if (heat === 'neutral' && streak <= 1) return null;
+
+  const config = {
+    hot: {
+      bg: 'rgba(240,180,41,0.12)',
+      color: '#F0B429',
+      border: 'rgba(240,180,41,0.25)',
+      icon: <Zap size={10} fill="#F0B429" />,
+      text: `${streak} W STREAK`,
+    },
+    cold: {
+      bg: 'rgba(248,113,113,0.1)',
+      color: '#F87171',
+      border: 'rgba(248,113,113,0.2)',
+      icon: <Minus size={10} />,
+      text: `${streak} L STREAK`,
+    },
+    neutral: {
+      bg: 'rgba(96,165,250,0.1)',
+      color: '#60A5FA',
+      border: 'rgba(96,165,250,0.2)',
+      icon: null,
+      text: `${streak} ${streakType}`,
+    },
+  }[heat as 'hot' | 'cold' | 'neutral'] || { bg: '', color: '', border: '', icon: null, text: '' };
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide"
+      style={{ background: config.bg, color: config.color, border: `1px solid ${config.border}` }}
+    >
+      {config.icon}
+      {config.text}
+    </span>
+  );
+}
+
+// Result dot
+function ResultDot({ result }: { result: 'W' | 'L' }) {
+  return (
+    <span
+      className="inline-block w-[7px] h-[7px] rounded-full flex-shrink-0"
+      style={{ background: result === 'W' ? '#34D399' : '#F87171' }}
+    />
+  );
+}
+
+// Type badge
+function TypeBadge({ type }: { type: string }) {
+  const isCoOp = type === 'CO-OP';
+  return (
+    <span
+      className="px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide"
+      style={{
+        background: isCoOp ? 'rgba(96,165,250,0.1)' : 'rgba(240,180,41,0.1)',
+        color: isCoOp ? '#60A5FA' : '#F0B429',
+        border: `1px solid ${isCoOp ? 'rgba(96,165,250,0.2)' : 'rgba(240,180,41,0.2)'}`,
+      }}
+    >
+      {type}
+    </span>
+  );
+}
+
+// Player row component
+function PlayerRow({ player, rank, index, stats }: { player: Player; rank: number; index: number; stats: { avg: number; wins: number; losses: number } }) {
+  const isHot = player.heat === 'hot';
+  const isCold = player.heat === 'cold';
+
+  return (
+    <Link href={`/players/${player.id}`}>
+      <motion.div
+        custom={index}
+        variants={fadeUp}
+        initial="hidden"
+        animate="visible"
+        whileHover={{ x: 2 }}
+        className="flex items-center gap-3 p-3.5 rounded-lg cursor-pointer relative overflow-hidden pinstripe"
+        style={{
+          background: '#0F1829',
+          border: `1px solid ${isHot ? 'rgba(240,180,41,0.2)' : 'rgba(255,255,255,0.07)'}`,
+          borderLeft: `3px solid ${isHot ? '#F0B429' : isCold ? '#374151' : 'rgba(255,255,255,0.07)'}`,
+          boxShadow: isHot ? '0 0 12px rgba(240,180,41,0.08)' : 'none',
+        }}
+      >
+        <span className="text-xs font-bold tabular-nums min-w-4" style={{ color: rank === 1 ? '#F0B429' : '#4A5772' }}>
+          {rank}
+        </span>
+
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, #162035 0%, #1A2640 100%)', color: '#8A9BBB' }}
+        >
+          {player.name[0]}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-sm font-semibold text-[#EFF2FF]">{player.name}</span>
+            <HeatBadge heat={player.heat} streak={player.streak} streakType={player.streak_type} />
+          </div>
+          <span className="text-xs text-[#4A5772]">
+            {stats.wins}W–{stats.losses}L
+          </span>
+        </div>
+
+        <div className="text-right">
+          <div className="text-xl font-bold text-[#EFF2FF] tabular-nums leading-none">
+            .{String(Math.round(stats.avg * 1000)).padStart(3, '0')}
+          </div>
+          <div className="text-[10px] text-[#4A5772] uppercase tracking-wide mt-0.5">AVG</div>
+        </div>
+
+        <ChevronRight size={14} color="#4A5772" />
+      </motion.div>
+    </Link>
+  );
+}
+
+// Session card
+function SessionCard({ session, index, games }: { session: Session; index: number; games: Game[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const sessionGames = games.filter(g => g.session_id === session.id);
+  const wins = sessionGames.filter(g => g.status === 'completed' && g.score?.startsWith('W')).length;
+  const losses = sessionGames.length - wins;
+
+  return (
+    <motion.div
+      custom={index}
+      variants={fadeUp}
+      initial="hidden"
+      animate="visible"
+      className="rounded-lg overflow-hidden"
+      style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
+    >
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-3 p-4 text-left"
+      >
+        <div className="min-w-10 text-[11px] font-medium text-[#4A5772] uppercase tracking-wide">
+          {new Date(session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-[#EFF2FF] mb-1">
+            {session.label || 'Game Night'}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {sessionGames.slice(0, 5).map((g, i) => (
+              <ResultDot key={i} result={g.score?.includes('W') ? 'W' : 'L'} />
+            ))}
+            <span className="text-[11px] text-[#4A5772] ml-1">
+              {wins}W {losses}L · {sessionGames.length} games
+            </span>
+          </div>
+        </div>
+
+        {session.mvp_player_id && (
+          <div className="flex items-center gap-1.5">
+            <Award size={12} color="#F0B429" />
+            <span className="text-xs text-[#F0B429] font-semibold">MVP</span>
+          </div>
+        )}
+
+        <motion.div animate={{ rotate: expanded ? 90 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronRight size={14} color="#4A5772" />
+        </motion.div>
+      </button>
+
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-white/5 py-2">
+              {sessionGames.map((game) => (
+                <Link key={game.id} href={`/game/${game.id}`}>
+                  <div className="flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
+                    <ResultDot result={game.score?.includes('W') ? 'W' : 'L'} />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-[13px] font-semibold text-[#EFF2FF]">
+                          {game.score?.includes('W') ? 'W' : 'L'}{' '}
+                          <span style={{ color: game.score?.includes('W') ? '#34D399' : '#F87171' }}>
+                            {game.score?.replace(/^[WL]\s*/, '') || '0-0'}
+                          </span>
+                        </span>
+                        <span className="text-xs text-[#4A5772]">vs {game.opponent || 'Unknown'}</span>
+                        <TypeBadge type={game.game_type} />
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-[#4A5772]">{game.innings} inn</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// Leader card
+function LeaderCard({ label, player, value, index }: { label: string; player: string; value: string; index: number }) {
+  return (
+    <motion.div
+      custom={index}
+      variants={fadeUp}
+      initial="hidden"
+      animate="visible"
+      whileHover={{ y: -2 }}
+      className="flex-1 p-4 rounded-lg relative overflow-hidden pinstripe min-w-0"
+      style={{
+        background: '#0F1829',
+        border: '1px solid rgba(240,180,41,0.15)',
+        boxShadow: '0 0 20px rgba(240,180,41,0.04)',
+      }}
+    >
+      <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2">{label}</div>
+      <div className="font-display font-bold text-4xl text-[#EFF2FF] tabular-nums leading-none">{value}</div>
+      <div className="text-xs text-[#8A9BBB] mt-1.5 font-medium">{player}</div>
+    </motion.div>
+  );
+}
+
+// Nav items
+const NAV_ITEMS = [
+  { icon: Home, label: 'Dashboard', href: '/', active: true },
+  { icon: BookOpen, label: 'Sessions', href: '/sessions', active: false },
+  { icon: User, label: 'Players', href: '/players', active: false },
+  { icon: Trophy, label: 'Awards', href: '/awards', active: false },
+  { icon: BarChart2, label: 'Stats', href: '/stats', active: false },
+];
+
+// Sidebar
+function Sidebar() {
+  return (
+    <div className="sidebar w-[220px] flex-shrink-0 h-screen sticky top-0 flex flex-col py-6" style={{ background: '#080D18', borderRight: '1px solid rgba(255,255,255,0.07)' }}>
+      <div className="px-5 pb-7">
+        <YardLogo />
+      </div>
+
+      <nav className="flex-1">
+        {NAV_ITEMS.map((item) => (
+          <Link key={item.label} href={item.href}>
+            <motion.div
+              whileHover={{ x: 2 }}
+              className="flex items-center gap-2.5 w-full px-5 py-2.5 text-sm"
+              style={{
+                borderLeft: `3px solid ${item.active ? '#F0B429' : 'transparent'}`,
+                fontWeight: item.active ? 600 : 400,
+                color: item.active ? '#EFF2FF' : '#4A5772',
+              }}
+            >
+              <item.icon size={16} />
+              {item.label}
+            </motion.div>
+          </Link>
+        ))}
+      </nav>
+
+      <Link href="/settings">
+        <div className="flex items-center gap-2.5 px-5 py-2.5 text-[13px] text-[#4A5772]">
+          <Settings size={15} />
+          Settings
+        </div>
+      </Link>
+    </div>
+  );
+}
+
+// Bottom nav (mobile)
+function BottomNav() {
+  return (
+    <div className="bottom-nav fixed bottom-0 left-0 right-0 flex z-50" style={{ background: '#0F1829', borderTop: '1px solid rgba(255,255,255,0.07)', padding: '8px 0 max(8px, env(safe-area-inset-bottom))' }}>
+      {NAV_ITEMS.slice(0, 5).map((item) => (
+        <Link key={item.label} href={item.href} className="flex-1">
+          <div className="flex flex-col items-center gap-1 text-[10px] font-medium uppercase tracking-wide" style={{ color: item.active ? '#F0B429' : '#4A5772' }}>
+            <item.icon size={18} />
+            {item.label}
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+// Main dashboard
+export default function Dashboard() {
   const router = useRouter();
-  const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [activeGame, setActiveGame] = useState<Game | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [games, setGames] = useState<Game[]>([]);
+  const [atBats, setAtBats] = useState<AtBat[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function init() {
-      // Fetch or create players
-      const { data: existingPlayers } = await supabase
-        .from('players')
-        .select('*');
+    async function loadData() {
+      const [playersRes, sessionsRes, gamesRes, atBatsRes] = await Promise.all([
+        supabase.from('players').select('*'),
+        supabase.from('sessions').select('*').order('date', { ascending: false }).limit(5),
+        supabase.from('games').select('*').order('created_at', { ascending: false }),
+        supabase.from('at_bats').select('*'),
+      ]);
 
-      if (!existingPlayers || existingPlayers.length === 0) {
-        // Seed players
-        const { data: newPlayers } = await supabase
-          .from('players')
-          .insert(PLAYERS.map((name) => ({ name })))
-          .select();
-        setPlayers(newPlayers || []);
-      } else {
-        setPlayers(existingPlayers);
-      }
-
-      // Check for active game
-      const { data: games } = await supabase
-        .from('games')
-        .select('*')
-        .eq('status', 'in_progress')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (games && games.length > 0) {
-        setActiveGame(games[0]);
-      }
-
+      setPlayers(playersRes.data || []);
+      setSessions(sessionsRes.data || []);
+      setGames(gamesRes.data || []);
+      setAtBats(atBatsRes.data || []);
       setLoading(false);
     }
-    init();
+    loadData();
   }, []);
 
-  const togglePlayer = (playerName: string) => {
-    setSelectedPlayers((prev) =>
-      prev.includes(playerName)
-        ? prev.filter((p) => p !== playerName)
-        : [...prev, playerName]
+  // Calculate stats for each player
+  const playerStats = players.map((player) => {
+    const playerAtBats = atBats.filter((ab) => ab.player_id === player.id);
+    const singles = playerAtBats.filter((ab) => ab.result === 'single').length;
+    const doubles = playerAtBats.filter((ab) => ab.result === 'double').length;
+    const triples = playerAtBats.filter((ab) => ab.result === 'triple').length;
+    const homeruns = playerAtBats.filter((ab) => ab.result === 'homerun').length;
+    const walks = playerAtBats.filter((ab) => ab.result === 'walk').length;
+    const strikeouts = playerAtBats.filter((ab) => ab.result === 'strikeout').length;
+    const outs = playerAtBats.filter((ab) => ab.result === 'out').length;
+
+    const hits = singles + doubles + triples + homeruns;
+    const ab = hits + strikeouts + outs;
+    const avg = ab > 0 ? hits / ab : 0;
+
+    // Calculate wins/losses from games
+    const playerGames = games.filter(g =>
+      g.game_players?.some(gp => gp.player_id === player.id)
     );
-  };
+    const wins = playerGames.filter(g => g.score?.includes('W')).length;
+    const losses = playerGames.filter(g => g.score?.includes('L')).length;
 
-  const startGame = async () => {
-    if (selectedPlayers.length < 2) return;
+    return { player, avg, hits, homeruns, wins, losses };
+  });
 
-    const selectedPlayerIds = players
-      .filter((p) => selectedPlayers.includes(p.name))
-      .map((p) => p.id);
+  // Sort by avg for leaderboard
+  const sortedByAvg = [...playerStats].sort((a, b) => b.avg - a.avg);
+  const sortedByHr = [...playerStats].sort((a, b) => b.homeruns - a.homeruns);
+  const sortedByWins = [...playerStats].sort((a, b) => b.wins - a.wins);
 
-    // Create new game
-    const { data: game, error: gameError } = await supabase
-      .from('games')
-      .insert({
-        date: new Date().toISOString().split('T')[0],
-        status: 'in_progress',
-        current_inning: 1,
-        current_outs: 0,
-      })
-      .select()
-      .single();
-
-    if (gameError || !game) {
-      console.error('Error creating game:', gameError);
-      return;
-    }
-
-    // Add players to game
-    const gamePlayers = selectedPlayerIds.map((playerId, index) => ({
-      game_id: game.id,
-      player_id: playerId,
-      batting_order: index + 1,
-    }));
-
-    await supabase.from('game_players').insert(gamePlayers);
-
-    router.push(`/game/${game.id}`);
-  };
+  const leader = sortedByAvg[0];
+  const hrLeader = sortedByHr[0];
+  const winsLeader = sortedByWins[0];
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-zinc-500">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#080D18' }}>
+        <div className="text-[#4A5772]">Loading...</div>
       </div>
     );
   }
 
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
   return (
-    <div className="space-y-8">
-      {activeGame && (
-        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
-          <p className="text-yellow-500 font-medium mb-2">Game in progress</p>
-          <button
-            onClick={() => router.push(`/game/${activeGame.id}`)}
-            className="text-sm text-yellow-400 hover:text-yellow-300 underline"
-          >
-            Continue game from {activeGame.date}
-          </button>
-        </div>
-      )}
+    <div className="flex min-h-screen" style={{ background: '#080D18' }}>
+      <Sidebar />
 
-      <div>
-        <h1 className="text-2xl font-bold mb-2">Start New Game</h1>
-        <p className="text-zinc-500">Select who's playing today</p>
+      {/* Mobile top bar */}
+      <div className="top-bar fixed top-0 left-0 right-0 z-50 hidden items-center justify-between px-5 py-3.5" style={{ background: 'rgba(8,13,24,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <YardLogo compact />
+        <span className="font-display font-bold text-base tracking-widest text-[#EFF2FF]">THE YARD</span>
+        <Link href="/log">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(240,180,41,0.12)', border: '1px solid rgba(240,180,41,0.2)' }}>
+            <Plus size={16} color="#F0B429" />
+          </div>
+        </Link>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        {PLAYERS.map((name) => {
-          const isSelected = selectedPlayers.includes(name);
-          return (
-            <button
-              key={name}
-              onClick={() => togglePlayer(name)}
-              className={`
-                p-6 rounded-lg border-2 text-center transition-all
-                ${
-                  isSelected
-                    ? 'border-blue-500 bg-blue-500/20 text-white'
-                    : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600'
-                }
-              `}
+      {/* Main content */}
+      <div className="main-content flex-1 overflow-y-auto p-7 max-w-[900px]">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-start justify-between mb-7 flex-wrap gap-3"
+        >
+          <div>
+            <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-1">
+              {today} · Season 2025
+            </div>
+            <h1 className="font-display font-bold text-[28px] tracking-wide text-[#EFF2FF]">
+              TONIGHT AT THE YARD
+            </h1>
+          </div>
+
+          <Link href="/log">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold"
+              style={{ background: '#F0B429', color: '#080D18' }}
             >
-              <span className="text-xl font-semibold">{name}</span>
-            </button>
-          );
-        })}
+              <Plus size={15} />
+              Log Game
+            </motion.button>
+          </Link>
+        </motion.div>
+
+        {/* Season leaders */}
+        {leader && (
+          <section className="mb-7">
+            <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 flex items-center gap-1.5">
+              <Trophy size={11} color="#F0B429" />
+              Season Leaders
+            </div>
+            <div className="leader-row flex gap-3">
+              <LeaderCard
+                label="Batting Avg"
+                player={leader.player.name}
+                value={`.${String(Math.round(leader.avg * 1000)).padStart(3, '0')}`}
+                index={0}
+              />
+              <LeaderCard
+                label="Home Runs"
+                player={hrLeader?.player.name || '-'}
+                value={String(hrLeader?.homeruns || 0)}
+                index={1}
+              />
+              <LeaderCard
+                label="Season Wins"
+                player={winsLeader?.player.name || '-'}
+                value={String(winsLeader?.wins || 0)}
+                index={2}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* Two column layout */}
+        <div className="player-stats-row flex gap-5 items-start">
+          {/* Sessions */}
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 flex items-center gap-1.5">
+              <Calendar size={11} />
+              Recent Sessions
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {sessions.length > 0 ? (
+                sessions.map((session, i) => (
+                  <SessionCard key={session.id} session={session} index={i} games={games} />
+                ))
+              ) : (
+                <div className="text-center py-8 text-[#4A5772] text-sm">
+                  No sessions yet. Start logging games!
+                </div>
+              )}
+            </div>
+            <Link href="/sessions">
+              <motion.div whileHover={{ x: 2 }} className="flex items-center gap-1.5 mt-3 text-[13px] text-[#60A5FA] font-medium">
+                View all sessions <ChevronRight size={13} />
+              </motion.div>
+            </Link>
+          </div>
+
+          {/* Player leaderboard */}
+          <div className="w-[260px] flex-shrink-0">
+            <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 flex items-center gap-1.5">
+              <Zap size={11} color="#F0B429" />
+              Hot / Cold
+            </div>
+            <div className="flex flex-col gap-2">
+              {sortedByAvg.map((ps, i) => (
+                <PlayerRow
+                  key={ps.player.id}
+                  player={ps.player}
+                  rank={i + 1}
+                  index={i}
+                  stats={{ avg: ps.avg, wins: ps.wins, losses: ps.losses }}
+                />
+              ))}
+            </div>
+            <Link href="/h2h">
+              <motion.div whileHover={{ x: 2 }} className="flex items-center gap-1.5 mt-3 text-[13px] text-[#60A5FA] font-medium">
+                <ArrowLeftRight size={13} />
+                Head-to-head
+              </motion.div>
+            </Link>
+          </div>
+        </div>
       </div>
 
-      <button
-        onClick={startGame}
-        disabled={selectedPlayers.length < 2}
-        className={`
-          w-full py-4 rounded-lg font-semibold text-lg transition-all
-          ${
-            selectedPlayers.length >= 2
-              ? 'bg-green-600 hover:bg-green-500 text-white'
-              : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-          }
-        `}
-      >
-        {selectedPlayers.length < 2
-          ? 'Select at least 2 players'
-          : `Start Game (${selectedPlayers.join(' vs ')})`}
-      </button>
+      <BottomNav />
     </div>
   );
 }
