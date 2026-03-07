@@ -9,6 +9,9 @@ if (typeof window !== 'undefined') {
     urlSet: !!supabaseUrl,
     keySet: !!supabaseAnonKey,
     urlPrefix: supabaseUrl?.substring(0, 30),
+    keyLength: supabaseAnonKey?.length,
+    keyPrefix: supabaseAnonKey?.substring(0, 20),
+    keySuffix: supabaseAnonKey?.substring(supabaseAnonKey.length - 10),
   });
 }
 
