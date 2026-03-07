@@ -173,7 +173,7 @@ function PlayerRow({ player, rank, index, stats }: { player: Player; rank: numbe
 // Session card
 function SessionCard({ session, index, games }: { session: Session; index: number; games: Game[] }) {
   const [expanded, setExpanded] = useState(false);
-  const sessionGames = games.filter(g => g.session_id === session.id);
+  const sessionGames = games.filter(g => g.session_id === session.id && g.game_mode !== '1v1');
   const wins = sessionGames.filter(g => g.status === 'completed' && g.score?.startsWith('W')).length;
   const losses = sessionGames.length - wins;
 

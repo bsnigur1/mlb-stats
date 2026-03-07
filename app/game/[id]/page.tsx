@@ -332,7 +332,7 @@ export default function GamePage() {
             <div className="space-y-4 mb-6">
               <div>
                 <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
-                  Our Score
+                  {game.game_mode === '1v1' ? gamePlayers[0]?.player.name || 'Player 1' : 'Snigurs'}
                 </label>
                 <input
                   type="number"
@@ -346,7 +346,7 @@ export default function GamePage() {
               </div>
               <div>
                 <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
-                  Their Score
+                  {game.game_mode === '1v1' ? gamePlayers[1]?.player.name || 'Player 2' : 'Opponents'}
                 </label>
                 <input
                   type="number"
