@@ -130,13 +130,20 @@ export default function StatsPage() {
     loadData();
   }, []);
 
-  // Find the 2025 historical session
-  const historicalSession = sessions.find((s) => s.label?.includes('2025') || s.id === 'a0000000-0000-0000-0000-000000000001');
+  // Find 2025 season sessions (includes the historical one and any game sessions from 2025)
+  const season2025Sessions = sessions.filter((s) =>
+    s.label?.includes('2025') ||
+    s.id === 'a0000000-0000-0000-0000-000000000001' ||
+    (s.date && s.date.startsWith('2025'))
+  );
+  const season2025SessionIds = new Set(season2025Sessions.map(s => s.id));
 
-  // Get games from 2025 season
-  const season2025Games = historicalSession
-    ? games.filter((g) => g.session_id === historicalSession.id)
-    : [];
+  // Get games from 2025 season - include games in 2025 sessions OR games with 2025 date OR games with no session (default to current season)
+  const season2025Games = games.filter((g) =>
+    (g.session_id && season2025SessionIds.has(g.session_id)) ||
+    (g.date && g.date.startsWith('2025')) ||
+    !g.session_id // Games without a session are assumed to be current season (2025)
+  );
   const season2025GameIds = new Set(season2025Games.map((g) => g.id));
 
   // Filter at-bats for 2025 season
@@ -147,7 +154,7 @@ export default function StatsPage() {
     if (activeSection === '2025') {
       return players.map((player) => calculatePlayerStats(player, season2025AtBats, season2025Games));
     }
-    // Career = all stats
+    // Career = all stats (same as 2025 until we have multiple seasons)
     return players.map((player) => calculatePlayerStats(player, atBats, games));
   };
 
@@ -191,6 +198,8 @@ export default function StatsPage() {
     { key: 'name', label: 'Player' },
     { key: 'games', label: 'G' },
     { key: 'avg', label: 'AVG', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
+    { key: 'obp', label: 'OBP', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
+    { key: 'slg', label: 'SLG', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
     { key: 'ops', label: 'OPS', format: (v) => v.toFixed(3) },
     { key: 'hr', label: 'HR' },
     { key: 'rbi', label: 'RBI' },
@@ -309,6 +318,12 @@ export default function StatsPage() {
                     {columns.find((c) => c.key === 'avg')?.format?.(ps.avg)}
                   </td>
                   <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">
+                    {columns.find((c) => c.key === 'obp')?.format?.(ps.obp)}
+                  </td>
+                  <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">
+                    {columns.find((c) => c.key === 'slg')?.format?.(ps.slg)}
+                  </td>
+                  <td className="px-3 py-3 text-sm text-[#60A5FA] text-right tabular-nums font-bold">
                     {ps.ops.toFixed(3)}
                   </td>
                   <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.hr}</td>

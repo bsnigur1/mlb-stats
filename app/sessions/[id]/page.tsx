@@ -193,7 +193,7 @@ function GameCard({
           </div>
 
           {/* View game link */}
-          <Link href={`/game/${game.id}`}>
+          <Link href={`/recap/${game.id}`}>
             <motion.div
               whileHover={{ x: 2 }}
               className="flex items-center gap-1 mt-3 text-xs text-[#60A5FA] font-medium"
