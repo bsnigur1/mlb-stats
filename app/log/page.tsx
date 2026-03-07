@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -13,9 +13,11 @@ import {
   Target,
   Check,
   ChevronDown,
+  ChevronUp,
+  GripVertical,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Player, Session, Game, GameMode } from '@/lib/types';
 
@@ -187,8 +189,11 @@ function PlayerStatCard({
   );
 }
 
-export default function LogGame() {
+function LogGameContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialMode = (searchParams.get('mode') as GameMode) || '2v2';
+
   const [players, setPlayers] = useState<Player[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -196,8 +201,9 @@ export default function LogGame() {
 
   // Form state
   const [mode, setMode] = useState<'quick' | 'full'>('quick');
-  const [gameMode, setGameMode] = useState<GameMode>('2v2');
+  const [gameMode, setGameMode] = useState<GameMode>(initialMode);
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
+  const [battingOrder, setBattingOrder] = useState<string[]>([]); // Ordered list of player IDs
   const [h2hOpponent, setH2hOpponent] = useState<string | null>(null); // For 1v1: who you played against
   const [opponent, setOpponent] = useState('');
   const [ourScore, setOurScore] = useState(0);
@@ -269,6 +275,7 @@ export default function LogGame() {
       // Initialize all players as selected for co-op modes
       const allPlayerIds = playerData.map((p) => p.id);
       setSelectedPlayers(allPlayerIds);
+      setBattingOrder(allPlayerIds);
 
       // Initialize stats
       const initialStats: typeof playerStats = {};
@@ -337,10 +344,10 @@ export default function LogGame() {
 
       if (!game) throw new Error('Failed to create game');
 
-      // Add game players - for 1v1, include both players
+      // Add game players - for 1v1, include both players; for co-op use batting order
       const playerIdsToAdd = gameMode === '1v1' && h2hOpponent
         ? [currentPlayerId, h2hOpponent]
-        : selectedPlayers;
+        : battingOrder.filter(id => selectedPlayers.includes(id));
 
       const gamePlayers = playerIdsToAdd.map((playerId, idx) => ({
         game_id: game.id,
@@ -490,9 +497,31 @@ export default function LogGame() {
   };
 
   const togglePlayer = (playerId: string) => {
-    setSelectedPlayers((prev) =>
-      prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
-    );
+    setSelectedPlayers((prev) => {
+      if (prev.includes(playerId)) {
+        // Remove from selected and batting order
+        setBattingOrder((bo) => bo.filter((id) => id !== playerId));
+        return prev.filter((id) => id !== playerId);
+      } else {
+        // Add to selected and batting order
+        setBattingOrder((bo) => [...bo, playerId]);
+        return [...prev, playerId];
+      }
+    });
+  };
+
+  const moveBattingOrder = (playerId: string, direction: 'up' | 'down') => {
+    setBattingOrder((prev) => {
+      const index = prev.indexOf(playerId);
+      if (index === -1) return prev;
+      if (direction === 'up' && index === 0) return prev;
+      if (direction === 'down' && index === prev.length - 1) return prev;
+
+      const newOrder = [...prev];
+      const swapIndex = direction === 'up' ? index - 1 : index + 1;
+      [newOrder[index], newOrder[swapIndex]] = [newOrder[swapIndex], newOrder[index]];
+      return newOrder;
+    });
   };
 
   const updatePlayerStat = (playerId: string, key: string, value: number) => {
@@ -668,6 +697,62 @@ export default function LogGame() {
                   {selectedPlayers.includes(player.id) && <Check size={12} />}
                 </motion.button>
               ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Batting Order - for Co-Op modes */}
+        {(gameMode === '2v2' || gameMode === '3v3') && selectedPlayers.length > 1 && (
+          <motion.div custom={3.5} variants={fadeUp} initial="hidden" animate="visible">
+            <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+              Batting Order
+            </label>
+            <div className="space-y-2">
+              {battingOrder
+                .filter(id => selectedPlayers.includes(id))
+                .map((playerId, index) => {
+                  const player = players.find(p => p.id === playerId);
+                  if (!player) return null;
+                  return (
+                    <div
+                      key={playerId}
+                      className="flex items-center gap-3 p-3 rounded-lg"
+                      style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
+                    >
+                      <div className="flex items-center gap-2 text-[#4A5772]">
+                        <GripVertical size={14} />
+                        <span className="text-sm font-bold text-[#F0B429] tabular-nums w-5">{index + 1}</span>
+                      </div>
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
+                        style={{ background: '#162035', color: '#8A9BBB' }}
+                      >
+                        {player.name[0]}
+                      </div>
+                      <span className="flex-1 text-sm font-medium text-[#EFF2FF]">{player.name}</span>
+                      <div className="flex gap-1">
+                        <motion.button
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => moveBattingOrder(playerId, 'up')}
+                          disabled={index === 0}
+                          className="w-7 h-7 rounded flex items-center justify-center disabled:opacity-30"
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+                        >
+                          <ChevronUp size={14} color="#8A9BBB" />
+                        </motion.button>
+                        <motion.button
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => moveBattingOrder(playerId, 'down')}
+                          disabled={index === battingOrder.filter(id => selectedPlayers.includes(id)).length - 1}
+                          className="w-7 h-7 rounded flex items-center justify-center disabled:opacity-30"
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+                        >
+                          <ChevronDown size={14} color="#8A9BBB" />
+                        </motion.button>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </motion.div>
         )}
@@ -884,5 +969,13 @@ export default function LogGame() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function LogGame() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center" style={{ background: '#080D18' }}><div className="text-[#4A5772]">Loading...</div></div>}>
+      <LogGameContent />
+    </Suspense>
   );
 }

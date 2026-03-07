@@ -499,7 +499,7 @@ function HeadToHeadContent() {
               >
                 <Swords size={32} color="#4A5772" className="mx-auto mb-3" />
                 <div className="text-[#4A5772] text-sm mb-1">No 1v1 games yet</div>
-                <div className="text-[#4A5772] text-xs">Play some head-to-head games to build rivalries</div>
+                <div className="text-[#4A5772] text-xs">Play some Head-to-Head games to build rivalries</div>
               </motion.div>
             )}
           </>

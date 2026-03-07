@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp,
@@ -349,6 +349,73 @@ function BottomNav() {
   );
 }
 
+// Log Game dropdown
+function LogGameDropdown() {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const gameModes = [
+    { mode: '2v2', label: '2v2 Co-Op', color: '#60A5FA', bg: 'rgba(96,165,250,0.1)' },
+    { mode: '3v3', label: '3v3 Co-Op', color: '#34D399', bg: 'rgba(52,211,153,0.1)' },
+    { mode: '1v1', label: 'H2H', color: '#F0B429', bg: 'rgba(240,180,41,0.1)' },
+  ];
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <motion.button
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.97 }}
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold"
+        style={{ background: '#F0B429', color: '#080D18' }}
+      >
+        <Plus size={15} />
+        Log Game
+      </motion.button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 mt-2 w-44 rounded-lg overflow-hidden z-50"
+            style={{ background: '#162035', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}
+          >
+            {gameModes.map((gm) => (
+              <Link key={gm.mode} href={`/log?mode=${gm.mode}`}>
+                <motion.div
+                  whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
+                  className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                  onClick={() => setOpen(false)}
+                >
+                  <div
+                    className="w-2 h-2 rounded-full"
+                    style={{ background: gm.color }}
+                  />
+                  <span className="text-sm font-medium text-[#EFF2FF]">{gm.label}</span>
+                </motion.div>
+              </Link>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // Main dashboard
 export default function Dashboard() {
   const router = useRouter();
@@ -452,17 +519,7 @@ export default function Dashboard() {
             </h1>
           </div>
 
-          <Link href="/log">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold"
-              style={{ background: '#F0B429', color: '#080D18' }}
-            >
-              <Plus size={15} />
-              Log Game
-            </motion.button>
-          </Link>
+<LogGameDropdown />
         </motion.div>
 
         {/* Season leaders */}
@@ -541,7 +598,7 @@ export default function Dashboard() {
             <Link href="/h2h">
               <motion.div whileHover={{ x: 2 }} className="flex items-center gap-1.5 mt-3 text-[13px] text-[#60A5FA] font-medium">
                 <ArrowLeftRight size={13} />
-                Head-to-head
+                Head-to-Head
               </motion.div>
             </Link>
           </div>
