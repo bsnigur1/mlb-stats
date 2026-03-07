@@ -98,67 +98,34 @@ export default function StatsPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [activeSection, setActiveSection] = useState<'2025' | 'career'>('2025');
 
-  const [error, setError] = useState<string | null>(null);
-
   useEffect(() => {
     async function loadData() {
-      console.log('Stats page: Starting data load...');
+      const [playersRes, gamesRes, sessionsRes] = await Promise.all([
+        supabase.from('players').select('*'),
+        supabase.from('games').select('*, game_players(*)').limit(1000),
+        supabase.from('sessions').select('*'),
+      ]);
 
-      try {
-        const [playersRes, gamesRes, sessionsRes] = await Promise.all([
-          supabase.from('players').select('*'),
-          supabase.from('games').select('*, game_players(*)').limit(1000),
-          supabase.from('sessions').select('*'),
-        ]);
-
-        console.log('Stats page: Initial queries complete', {
-          playersError: playersRes.error?.message,
-          gamesError: gamesRes.error?.message,
-          sessionsError: sessionsRes.error?.message,
-          playersCount: playersRes.data?.length,
-          gamesCount: gamesRes.data?.length,
-          sessionsCount: sessionsRes.data?.length,
-        });
-
-        if (playersRes.error) throw new Error(`Players: ${playersRes.error.message}`);
-        if (gamesRes.error) throw new Error(`Games: ${gamesRes.error.message}`);
-        if (sessionsRes.error) throw new Error(`Sessions: ${sessionsRes.error.message}`);
-
-        // Fetch all at-bats (may be more than 1000)
-        let allAtBats: AtBat[] = [];
-        let offset = 0;
-        const batchSize = 1000;
-        while (true) {
-          const { data: batch, error: batchError } = await supabase
-            .from('at_bats')
-            .select('*')
-            .range(offset, offset + batchSize - 1);
-
-          if (batchError) throw new Error(`At-bats: ${batchError.message}`);
-          if (!batch || batch.length === 0) break;
-          allAtBats = [...allAtBats, ...batch];
-          console.log(`Stats page: Loaded ${allAtBats.length} at-bats so far...`);
-          if (batch.length < batchSize) break;
-          offset += batchSize;
-        }
-
-        console.log('Stats page: All data loaded', {
-          players: playersRes.data?.length,
-          games: gamesRes.data?.length,
-          sessions: sessionsRes.data?.length,
-          atBats: allAtBats.length,
-        });
-
-        setPlayers(playersRes.data || []);
-        setAtBats(allAtBats);
-        setGames(gamesRes.data || []);
-        setSessions(sessionsRes.data || []);
-        setLoading(false);
-      } catch (err) {
-        console.error('Stats page: Error loading data', err);
-        setError(err instanceof Error ? err.message : 'Unknown error');
-        setLoading(false);
+      // Fetch all at-bats (may be more than 1000)
+      let allAtBats: AtBat[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data: batch } = await supabase
+          .from('at_bats')
+          .select('*')
+          .range(offset, offset + batchSize - 1);
+        if (!batch || batch.length === 0) break;
+        allAtBats = [...allAtBats, ...batch];
+        if (batch.length < batchSize) break;
+        offset += batchSize;
       }
+
+      setPlayers(playersRes.data || []);
+      setAtBats(allAtBats);
+      setGames(gamesRes.data || []);
+      setSessions(sessionsRes.data || []);
+      setLoading(false);
     }
     loadData();
   }, []);
@@ -220,17 +187,6 @@ export default function StatsPage() {
     );
   }
 
-  // Debug info - remove after fixing
-  console.log('Stats Debug:', {
-    players: players.length,
-    games: games.length,
-    atBats: atBats.length,
-    sessions: sessions.length,
-    historicalSession: historicalSession?.label,
-    season2025Games: season2025Games.length,
-    season2025AtBats: season2025AtBats.length,
-  });
-
   const columns: { key: SortKey; label: string; format?: (v: number) => string }[] = [
     { key: 'name', label: 'Player' },
     { key: 'games', label: 'G' },
@@ -268,17 +224,6 @@ export default function StatsPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-5">
-        {/* Debug Banner - REMOVE AFTER FIXING */}
-        {error && (
-          <div className="mb-4 p-3 rounded bg-red-900/50 border border-red-500 text-red-200 text-xs">
-            ERROR: {error}
-          </div>
-        )}
-        <div className="mb-4 p-3 rounded bg-yellow-900/30 border border-yellow-500/50 text-yellow-200 text-xs">
-          DEBUG: Players={players.length} | Games={games.length} | AtBats={atBats.length} |
-          Sessions={sessions.length} | 2025Games={season2025Games.length} | 2025AtBats={season2025AtBats.length}
-        </div>
-
         {/* Section Tabs */}
         <div className="flex gap-2 mb-5">
           <motion.button
