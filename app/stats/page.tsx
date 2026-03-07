@@ -187,6 +187,17 @@ export default function StatsPage() {
     );
   }
 
+  // Debug info - remove after fixing
+  console.log('Stats Debug:', {
+    players: players.length,
+    games: games.length,
+    atBats: atBats.length,
+    sessions: sessions.length,
+    historicalSession: historicalSession?.label,
+    season2025Games: season2025Games.length,
+    season2025AtBats: season2025AtBats.length,
+  });
+
   const columns: { key: SortKey; label: string; format?: (v: number) => string }[] = [
     { key: 'name', label: 'Player' },
     { key: 'games', label: 'G' },
@@ -224,6 +235,12 @@ export default function StatsPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-5">
+        {/* Debug Banner - REMOVE AFTER FIXING */}
+        <div className="mb-4 p-3 rounded bg-yellow-900/30 border border-yellow-500/50 text-yellow-200 text-xs">
+          DEBUG: Players={players.length} | Games={games.length} | AtBats={atBats.length} |
+          Sessions={sessions.length} | 2025Games={season2025Games.length} | 2025AtBats={season2025AtBats.length}
+        </div>
+
         {/* Section Tabs */}
         <div className="flex gap-2 mb-5">
           <motion.button
