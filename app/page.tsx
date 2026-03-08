@@ -231,7 +231,7 @@ function SessionCard({ session, index, games }: { session: Session; index: numbe
           >
             <div className="border-t border-white/5 py-2">
               {sessionGames.map((game) => (
-                <Link key={game.id} href={`/game/${game.id}`}>
+                <Link key={game.id} href={`/recap/${game.id}`}>
                   <div className="flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
                     <ResultDot result={game.score?.includes('W') ? 'W' : 'L'} />
                     <div className="flex-1">
@@ -242,7 +242,6 @@ function SessionCard({ session, index, games }: { session: Session; index: numbe
                             {game.score?.replace(/^[WL]\s*/, '') || '0-0'}
                           </span>
                         </span>
-                        <span className="text-xs text-[#4A5772]">vs {game.opponent || 'Unknown'}</span>
                         <TypeBadge type={game.game_mode} />
                       </div>
                     </div>
