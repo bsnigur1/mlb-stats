@@ -46,6 +46,7 @@ export default function GamePage() {
   const [showEndModal, setShowEndModal] = useState(false);
   const [ourScore, setOurScore] = useState('');
   const [theirScore, setTheirScore] = useState('');
+  const [inningsPlayed, setInningsPlayed] = useState('9');
   const [ending, setEnding] = useState(false);
 
   // Leave game modal state
@@ -211,12 +212,13 @@ export default function GamePage() {
 
     const us = parseInt(ourScore) || 0;
     const them = parseInt(theirScore) || 0;
+    const innings = parseInt(inningsPlayed) || 9;
     const result = us > them ? 'W' : us < them ? 'L' : 'T';
     const score = `${result} ${us}-${them}`;
 
     await supabase
       .from('games')
-      .update({ status: 'completed', score })
+      .update({ status: 'completed', score, innings })
       .eq('id', gameId);
 
     router.push(`/recap/${gameId}`);
@@ -354,6 +356,21 @@ export default function GamePage() {
                   value={theirScore}
                   onChange={(e) => setTheirScore(e.target.value)}
                   placeholder="0"
+                  className="w-full px-4 py-3 rounded-lg text-xl font-bold text-center text-[#EFF2FF] placeholder-[#4A5772]"
+                  style={{ background: '#162035', border: '1px solid rgba(255,255,255,0.1)' }}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                  Innings
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={inningsPlayed}
+                  onChange={(e) => setInningsPlayed(e.target.value)}
+                  placeholder="9"
                   className="w-full px-4 py-3 rounded-lg text-xl font-bold text-center text-[#EFF2FF] placeholder-[#4A5772]"
                   style={{ background: '#162035', border: '1px solid rgba(255,255,255,0.1)' }}
                 />
