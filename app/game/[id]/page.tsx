@@ -46,7 +46,7 @@ export default function GamePage() {
   const [showEndModal, setShowEndModal] = useState(false);
   const [ourScore, setOurScore] = useState('');
   const [theirScore, setTheirScore] = useState('');
-  const [inningsPlayed, setInningsPlayed] = useState('9');
+  const [inningsPlayed, setInningsPlayed] = useState('');
   const [ending, setEnding] = useState(false);
 
   // Leave game modal state
@@ -212,7 +212,7 @@ export default function GamePage() {
 
     const us = parseInt(ourScore) || 0;
     const them = parseInt(theirScore) || 0;
-    const innings = parseInt(inningsPlayed) || 9;
+    const innings = parseInt(inningsPlayed) || 0;
     const result = us > them ? 'W' : us < them ? 'L' : 'T';
     const score = `${result} ${us}-${them}`;
 
