@@ -130,31 +130,10 @@ export default function StatsPage() {
     loadData();
   }, []);
 
-  // Find 2025 season sessions (includes the historical one and any game sessions from 2025)
-  const season2025Sessions = sessions.filter((s) =>
-    s.label?.includes('2025') ||
-    s.id === 'a0000000-0000-0000-0000-000000000001' ||
-    (s.date && s.date.startsWith('2025'))
-  );
-  const season2025SessionIds = new Set(season2025Sessions.map(s => s.id));
-
-  // Get games from 2025 season - include games in 2025 sessions OR games with 2025 date OR games with no session (default to current season)
-  const season2025Games = games.filter((g) =>
-    (g.session_id && season2025SessionIds.has(g.session_id)) ||
-    (g.date && g.date.startsWith('2025')) ||
-    !g.session_id // Games without a session are assumed to be current season (2025)
-  );
-  const season2025GameIds = new Set(season2025Games.map((g) => g.id));
-
-  // Filter at-bats for 2025 season
-  const season2025AtBats = atBats.filter((ab) => season2025GameIds.has(ab.game_id));
-
-  // Calculate stats based on active section
+  // Calculate stats - 2025 season and career are the same until a new season starts
+  // All games are part of the 2025 season for now
   const getFilteredStats = () => {
-    if (activeSection === '2025') {
-      return players.map((player) => calculatePlayerStats(player, season2025AtBats, season2025Games));
-    }
-    // Career = all stats (same as 2025 until we have multiple seasons)
+    // Both 2025 and career show all stats until user indicates a new season
     return players.map((player) => calculatePlayerStats(player, atBats, games));
   };
 
