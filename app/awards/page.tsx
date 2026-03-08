@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, Target, Sparkles } from 'lucide-react';
+import { ArrowLeft, Target, Sparkles, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 // Animation variants
@@ -35,6 +35,16 @@ const ACHIEVEMENTS = [
     date: 'July 2025',
     icon: Sparkles,
     color: '#A855F7',
+  },
+  {
+    id: 'immaculate-inning',
+    title: 'Immaculate Inning',
+    player: 'Greg',
+    description: '9 pitches, 9 strikes',
+    detail: '3 strikeouts',
+    date: 'March 7, 2026',
+    icon: Zap,
+    color: '#22C55E',
   },
 ];
 
