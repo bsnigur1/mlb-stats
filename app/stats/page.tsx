@@ -196,7 +196,7 @@ export default function StatsPage() {
 
   const columns: { key: SortKey; label: string; format?: (v: number) => string }[] = [
     { key: 'name', label: 'Player' },
-    { key: 'games', label: 'G' },
+    { key: 'ab', label: 'AB' },
     { key: 'avg', label: 'AVG', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
     { key: 'obp', label: 'OBP', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
     { key: 'slg', label: 'SLG', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
@@ -313,7 +313,7 @@ export default function StatsPage() {
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-sm text-[#8A9BBB] text-right tabular-nums">{ps.games}</td>
+                  <td className="px-3 py-3 text-sm text-[#8A9BBB] text-right tabular-nums">{ps.ab}</td>
                   <td className="px-3 py-3 text-sm text-[#F0B429] text-right tabular-nums font-bold">
                     {columns.find((c) => c.key === 'avg')?.format?.(ps.avg)}
                   </td>
