@@ -16,6 +16,7 @@ import {
   Trophy,
   Settings,
   Minus,
+  Radio,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -528,6 +529,46 @@ export default function Dashboard() {
 
 <LogGameDropdown />
         </motion.div>
+
+        {/* Live Game Banner */}
+        {games.some(g => g.status === 'in_progress') && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-7"
+          >
+            {games.filter(g => g.status === 'in_progress').map((liveGame) => (
+              <Link key={liveGame.id} href={`/live/${liveGame.id}`}>
+                <motion.div
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  className="flex items-center gap-4 p-4 rounded-xl cursor-pointer"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(239,68,68,0.05) 100%)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                  }}
+                >
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  >
+                    <Radio size={20} color="#EF4444" fill="#EF4444" />
+                  </motion.div>
+                  <div className="flex-1">
+                    <div className="text-sm font-bold text-[#EFF2FF]">Game in Progress</div>
+                    <div className="text-xs text-[#8A9BBB]">
+                      {liveGame.game_mode === '1v1' ? 'Head to Head' : `${liveGame.game_mode} Co-Op`} · Inning {liveGame.current_inning}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-[#EF4444]">Watch Live</span>
+                    <ChevronRight size={16} color="#EF4444" />
+                  </div>
+                </motion.div>
+              </Link>
+            ))}
+          </motion.div>
+        )}
 
         {/* Season leaders */}
         {leader && (
