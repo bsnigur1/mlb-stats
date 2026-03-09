@@ -11,6 +11,8 @@ import {
   ChevronUp,
   GripVertical,
   Play,
+  Plus,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -68,6 +70,11 @@ function StartGameContent() {
   const [battingOrder, setBattingOrder] = useState<string[]>([]);
   const [h2hOpponent, setH2hOpponent] = useState<string | null>(null);
 
+  // Add player modal state
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const [addingPlayer, setAddingPlayer] = useState(false);
+
   useEffect(() => {
     async function loadData() {
       const { data: playerData } = await supabase.from('players').select('*');
@@ -76,6 +83,25 @@ function StartGameContent() {
     }
     loadData();
   }, []);
+
+  const addNewPlayer = async () => {
+    if (addingPlayer || !newPlayerName.trim()) return;
+    setAddingPlayer(true);
+
+    const { data: newPlayer } = await supabase
+      .from('players')
+      .insert({ name: newPlayerName.trim() })
+      .select()
+      .single();
+
+    if (newPlayer) {
+      setPlayers((prev) => [...prev, newPlayer]);
+    }
+
+    setNewPlayerName('');
+    setShowAddPlayer(false);
+    setAddingPlayer(false);
+  };
 
   const handleStartGame = async () => {
     if (starting) return;
@@ -170,6 +196,65 @@ function StartGameContent() {
 
   return (
     <div className="min-h-screen" style={{ background: '#080D18' }}>
+      {/* Add Player Modal */}
+      {showAddPlayer && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-5" style={{ background: 'rgba(0,0,0,0.8)' }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-sm rounded-xl p-5"
+            style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-[#EFF2FF]">Add New Player</h2>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => { setShowAddPlayer(false); setNewPlayerName(''); }}
+                className="p-1"
+              >
+                <X size={20} color="#8A9BBB" />
+              </motion.button>
+            </div>
+
+            <div className="mb-6">
+              <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                Player Name
+              </label>
+              <input
+                type="text"
+                value={newPlayerName}
+                onChange={(e) => setNewPlayerName(e.target.value)}
+                placeholder="Enter name"
+                autoFocus
+                className="w-full px-4 py-3 rounded-lg text-[#EFF2FF] placeholder-[#4A5772]"
+                style={{ background: '#162035', border: '1px solid rgba(255,255,255,0.1)' }}
+                onKeyDown={(e) => { if (e.key === 'Enter') addNewPlayer(); }}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => { setShowAddPlayer(false); setNewPlayerName(''); }}
+                className="flex-1 py-3 rounded-xl font-semibold"
+                style={{ background: '#162035', color: '#8A9BBB', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                Cancel
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={addNewPlayer}
+                disabled={addingPlayer || !newPlayerName.trim()}
+                className="flex-1 py-3 rounded-xl font-semibold disabled:opacity-50"
+                style={{ background: '#22C55E', color: '#080D18' }}
+              >
+                {addingPlayer ? 'Adding...' : 'Add Player'}
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Header */}
       <div
         className="sticky top-0 z-50 flex items-center gap-3 px-5 py-4"
@@ -239,6 +324,19 @@ function StartGameContent() {
                   {selectedPlayers.includes(player.id) && <Check size={14} />}
                 </motion.button>
               ))}
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowAddPlayer(true)}
+                className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium"
+                style={{
+                  background: 'rgba(96,165,250,0.1)',
+                  border: '1px solid rgba(96,165,250,0.3)',
+                  color: '#60A5FA',
+                }}
+              >
+                <Plus size={16} />
+                Add Player
+              </motion.button>
             </div>
           </motion.div>
         )}
