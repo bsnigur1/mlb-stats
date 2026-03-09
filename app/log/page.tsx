@@ -83,53 +83,16 @@ function StartGameContent() {
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const now = new Date();
-      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
-      let sessionId: string;
 
-      // For co-op games, check for an active session (activity within last 2 hours)
-      // H2H games don't need sessions
-      if (gameMode !== '1v1') {
-        const { data: recentSessions } = await supabase
-          .from('sessions')
-          .select('*')
-          .neq('id', 'a0000000-0000-0000-0000-000000000001') // Exclude the historical 2025 season
-          .gte('last_activity', twoHoursAgo)
-          .order('last_activity', { ascending: false })
-          .limit(1);
+      // Don't create session yet - sessions are created/assigned when game is completed
+      // This prevents empty sessions from being created if user quits mid-game
 
-        if (recentSessions && recentSessions.length > 0) {
-          // Use existing active session
-          sessionId = recentSessions[0].id;
-          await supabase
-            .from('sessions')
-            .update({ last_activity: now.toISOString() })
-            .eq('id', sessionId);
-        } else {
-          // Create new session
-          const { data: newSession } = await supabase
-            .from('sessions')
-            .insert({
-              date: today,
-              label: `Game Night ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-              last_activity: now.toISOString(),
-              is_active: true,
-            })
-            .select()
-            .single();
-          sessionId = newSession?.id;
-        }
-      } else {
-        // H2H games don't belong to a session
-        sessionId = null as unknown as string;
-      }
-
-      // Create game in 'in_progress' state
+      // Create game in 'in_progress' state with no session
       const currentPlayerId = selectedPlayers[0];
       const { data: game } = await supabase
         .from('games')
         .insert({
-          session_id: sessionId,
+          session_id: null,
           date: today,
           status: 'in_progress',
           current_inning: 1,

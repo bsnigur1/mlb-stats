@@ -207,7 +207,7 @@ export default function GamePage() {
   };
 
   const endGame = async () => {
-    if (ending) return;
+    if (ending || !game) return;
     setEnding(true);
 
     const us = parseInt(ourScore) || 0;
@@ -216,9 +216,48 @@ export default function GamePage() {
     const result = us > them ? 'W' : us < them ? 'L' : 'T';
     const score = `${result} ${us}-${them}`;
 
+    // For co-op games, create or find a session now that the game is complete
+    let sessionId: string | null = null;
+    if (game.game_mode !== '1v1') {
+      const now = new Date();
+      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
+      const today = new Date().toISOString().split('T')[0];
+
+      // Check for an active session (activity within last 2 hours)
+      const { data: recentSessions } = await supabase
+        .from('sessions')
+        .select('*')
+        .neq('id', 'a0000000-0000-0000-0000-000000000001')
+        .gte('last_activity', twoHoursAgo)
+        .order('last_activity', { ascending: false })
+        .limit(1);
+
+      if (recentSessions && recentSessions.length > 0) {
+        // Use existing active session
+        sessionId = recentSessions[0].id;
+        await supabase
+          .from('sessions')
+          .update({ last_activity: now.toISOString() })
+          .eq('id', sessionId);
+      } else {
+        // Create new session
+        const { data: newSession } = await supabase
+          .from('sessions')
+          .insert({
+            date: today,
+            label: `Game Night ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+            last_activity: now.toISOString(),
+            is_active: true,
+          })
+          .select()
+          .single();
+        sessionId = newSession?.id || null;
+      }
+    }
+
     await supabase
       .from('games')
-      .update({ status: 'completed', score, innings })
+      .update({ status: 'completed', score, innings, session_id: sessionId })
       .eq('id', gameId);
 
     router.push(`/recap/${gameId}`);
