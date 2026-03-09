@@ -286,7 +286,7 @@ const NAV_ITEMS = [
   { icon: BookOpen, label: 'Sessions', href: '/sessions', active: false },
   { icon: BarChart2, label: 'Stats', href: '/stats', active: false },
   { icon: ArrowLeftRight, label: 'Head-to-Head', href: '/h2h', active: false },
-  { icon: Trophy, label: 'Awards', href: '/awards', active: false },
+  { icon: Trophy, label: 'Achievements', href: '/awards', active: false },
 ];
 
 // Sidebar
