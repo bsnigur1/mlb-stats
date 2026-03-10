@@ -24,7 +24,7 @@ const AT_BAT_BUTTONS: { result: AtBatResult; label: string; color: string; needs
   { result: 'triple', label: 'Triple', color: '#A855F7', needsRbi: true },
   { result: 'homerun', label: 'Homerun', color: '#F97316', needsRbi: true },
   { result: 'strikeout', label: 'Strikeout', color: '#EF4444', needsRbi: false },
-  { result: 'out', label: 'In Play Out', color: '#6B7280', needsRbi: false },
+  { result: 'out', label: 'In Play Out', color: '#6B7280', needsRbi: true },
   { result: 'error', label: 'Reached on Error', color: '#8B5CF6', needsRbi: true },
   { result: 'walk', label: 'Walk', color: '#F0B429', needsRbi: false },
 ];
