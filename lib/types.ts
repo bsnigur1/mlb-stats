@@ -73,6 +73,10 @@ export interface Game {
   h2h_player2_id: string | null;
   h2h_winner_id: string | null;
   mvp_player_id: string | null;
+  // Pitching tracking
+  track_pitching: boolean;
+  batting_first: boolean;
+  current_pitcher_id: string | null;
   created_at: string;
   // Relations
   game_players?: GamePlayer[];
@@ -92,10 +96,11 @@ export interface AtBat {
   id: string;
   game_id: string;
   player_id: string;
+  pitcher_id: string | null;
   inning: number;
   result: AtBatResult;
   rbi: number;
-  // Pitching stats (optional)
+  // Pitching stats (optional - legacy fields)
   innings_pitched: number;
   hits_allowed: number;
   runs_allowed: number;
@@ -104,6 +109,12 @@ export interface AtBat {
   strikeouts_pitched: number;
   created_at: string;
   player?: Player;
+}
+
+// Baserunner tracking for ERA calculation
+export interface Baserunner {
+  base: 1 | 2 | 3;
+  pitcher_id: string; // Who put them on base (for ERA)
 }
 
 export interface Award {

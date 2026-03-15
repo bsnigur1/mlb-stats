@@ -70,6 +70,8 @@ function StartGameContent() {
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [battingOrder, setBattingOrder] = useState<string[]>([]);
   const [h2hOpponent, setH2hOpponent] = useState<string | null>(null);
+  const [trackPitching, setTrackPitching] = useState(false);
+  const [battingFirst, setBattingFirst] = useState(true);
 
   // Add player modal state
   const [showAddPlayer, setShowAddPlayer] = useState(false);
@@ -133,6 +135,8 @@ function StartGameContent() {
           game_mode: gameMode,
           h2h_player1_id: gameMode === '1v1' ? currentPlayerId : null,
           h2h_player2_id: gameMode === '1v1' ? h2hOpponent : null,
+          track_pitching: trackPitching,
+          batting_first: battingFirst,
         })
         .select()
         .single();
@@ -354,7 +358,7 @@ function StartGameContent() {
               Batting Order
             </label>
             <div className="space-y-2">
-              {battingOrder
+              {[...new Set(battingOrder)]
                 .filter(id => selectedPlayers.includes(id))
                 .map((playerId, index) => {
                   const player = players.find(p => p.id === playerId);
@@ -473,8 +477,72 @@ function StartGameContent() {
           </>
         )}
 
+        {/* Pitching Toggle - only for Co-Op modes */}
+        {(gameMode === '2v2' || gameMode === '3v3') && selectedPlayers.length >= 2 && (
+          <motion.div custom={3} variants={fadeUp} initial="hidden" animate="visible">
+            <div className="flex items-center justify-between p-4 rounded-lg" style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div>
+                <div className="text-sm font-semibold text-[#EFF2FF]">Track Pitching Stats</div>
+                <div className="text-xs text-[#4A5772]">ERA, strikeouts, walks</div>
+              </div>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setTrackPitching(!trackPitching)}
+                className="w-12 h-7 rounded-full relative transition-colors"
+                style={{ background: trackPitching ? '#22C55E' : '#374151' }}
+              >
+                <motion.div
+                  className="w-5 h-5 rounded-full bg-white absolute top-1"
+                  animate={{ left: trackPitching ? 26 : 4 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                />
+              </motion.button>
+            </div>
+
+            {/* Batting/Pitching First - only shows when pitching is enabled */}
+            {trackPitching && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-3"
+              >
+                <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                  Starting on
+                </label>
+                <div className="flex gap-2">
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => setBattingFirst(true)}
+                    className="flex-1 py-3 px-4 rounded-lg text-sm font-semibold transition-colors"
+                    style={{
+                      background: battingFirst ? '#60A5FA' : 'rgba(255,255,255,0.05)',
+                      color: battingFirst ? '#080D18' : '#8A9BBB',
+                      border: `1px solid ${battingFirst ? '#60A5FA' : 'rgba(255,255,255,0.1)'}`,
+                    }}
+                  >
+                    Batting First
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => setBattingFirst(false)}
+                    className="flex-1 py-3 px-4 rounded-lg text-sm font-semibold transition-colors"
+                    style={{
+                      background: !battingFirst ? '#EF4444' : 'rgba(255,255,255,0.05)',
+                      color: !battingFirst ? '#FFF' : '#8A9BBB',
+                      border: `1px solid ${!battingFirst ? '#EF4444' : 'rgba(255,255,255,0.1)'}`,
+                    }}
+                  >
+                    Pitching First
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+
         {/* Start Game Button */}
-        <motion.div custom={3} variants={fadeUp} initial="hidden" animate="visible" className="pt-4">
+        <motion.div custom={4} variants={fadeUp} initial="hidden" animate="visible" className="pt-4">
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}

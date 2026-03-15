@@ -21,7 +21,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Player, Session, Game, GamePlayer, AtBat, HotStreak } from '@/lib/types';
+import { Player, Session, Game, GamePlayer, AtBat, HotStreak, Season } from '@/lib/types';
 import { calculateHotStreaks, formatHotStreak } from '@/lib/hot-streaks';
 
 // Animation variants
@@ -155,20 +155,13 @@ function PlayerRow({ player, rank, index, stats, hotStreaks }: { player: Player;
       <div className="flex-1 min-w-0">
         <span className="text-sm font-semibold text-[#EFF2FF]">{player.name}</span>
         {topStreak && (
-          <div className="flex items-center gap-1 mt-0.5">
-            <Zap size={10} color="#F0B429" fill="#F0B429" />
-            <span className="text-xs font-semibold text-[#F0B429]">
+          <div className="flex items-center gap-1.5 mt-1">
+            <Zap size={12} color="#F0B429" fill="#F0B429" />
+            <span className="text-sm font-bold text-[#F0B429]">
               {formatHotStreak(topStreak)}
             </span>
           </div>
         )}
-      </div>
-
-      <div className="text-right">
-        <div className="text-xl font-bold text-[#EFF2FF] tabular-nums leading-none">
-          .{String(Math.round(stats.avg * 1000)).padStart(3, '0')}
-        </div>
-        <div className="text-[10px] text-[#4A5772] uppercase tracking-wide mt-0.5">AVG</div>
       </div>
     </motion.div>
   );
@@ -420,14 +413,16 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [atBats, setAtBats] = useState<AtBat[]>([]);
+  const [season2026, setSeason2026] = useState<Season | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
-      const [playersRes, sessionsRes, gamesRes] = await Promise.all([
+      const [playersRes, sessionsRes, gamesRes, seasonsRes] = await Promise.all([
         supabase.from('players').select('*'),
         supabase.from('sessions').select('*').order('date', { ascending: false }).limit(5),
         supabase.from('games').select('*, game_players(*), at_bats(*)').order('created_at', { ascending: false }).limit(500),
+        supabase.from('seasons').select('*').eq('year', 2026).single(),
       ]);
 
       // Fetch all at-bats (may be more than 1000)
@@ -449,6 +444,7 @@ export default function Dashboard() {
       setSessions(sessionsRes.data || []);
       setGames(gamesRes.data || []);
       setAtBats(allAtBats);
+      setSeason2026(seasonsRes.data || null);
       setLoading(false);
     }
     loadData();
@@ -461,9 +457,20 @@ export default function Dashboard() {
     ? completedGames.filter(g => g.session_id === lastSession.id)
     : [];
 
-  // Calculate stats for each player
+  // Filter to 2026 season for season leaders
+  const season2026Games = season2026
+    ? games.filter(g => g.season_id === season2026.id)
+    : [];
+  const season2026GameIds = new Set(season2026Games.map(g => g.id));
+  const season2026AtBats = atBats.filter(ab => {
+    const game = games.find(g => g.id === ab.game_id);
+    return game && game.season_id === season2026?.id;
+  });
+
+  // Calculate stats for each player (2026 season only for leaders)
   const playerStats = players.map((player) => {
-    const playerAtBats = atBats.filter((ab) => ab.player_id === player.id);
+    // Use 2026 filtered at-bats for season leaders
+    const playerAtBats = season2026AtBats.filter((ab) => ab.player_id === player.id);
     const singles = playerAtBats.filter((ab) => ab.result === 'single').length;
     const doubles = playerAtBats.filter((ab) => ab.result === 'double').length;
     const triples = playerAtBats.filter((ab) => ab.result === 'triple').length;
@@ -476,14 +483,14 @@ export default function Dashboard() {
     const ab = hits + strikeouts + outs;
     const avg = ab > 0 ? hits / ab : 0;
 
-    // Calculate wins/losses from games
-    const playerGames = games.filter(g =>
+    // Calculate wins/losses from 2026 games only
+    const playerGames = season2026Games.filter(g =>
       g.game_players?.some(gp => gp.player_id === player.id)
     );
     const wins = playerGames.filter(g => g.score?.includes('W')).length;
     const losses = playerGames.filter(g => g.score?.includes('L')).length;
 
-    // Calculate hot streaks
+    // Calculate hot streaks (uses all recent games for hot streaks, not just 2026)
     const recentGamesForPlayer = completedGames
       .filter(g => g.game_players?.some(gp => gp.player_id === player.id))
       .slice(0, 3);
@@ -545,7 +552,7 @@ export default function Dashboard() {
         >
           <div>
             <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-1">
-              {today} · Season 2025
+              {today} · Season 2026
             </div>
             <h1 className="font-display font-bold text-[28px] tracking-wide text-[#EFF2FF]">
               TONIGHT AT THE YARD
@@ -600,7 +607,7 @@ export default function Dashboard() {
           <section className="mb-7">
             <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 flex items-center gap-1.5">
               <Trophy size={11} color="#F0B429" />
-              Season Leaders
+              2026 Season Leaders
             </div>
             <div className="leader-row flex gap-3">
               <LeaderCard

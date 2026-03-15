@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Undo2, Flag, Circle, X, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { AtBatResult, Player, Game, GamePlayer, AtBat } from '@/lib/types';
+import { AtBatResult, Player, Game, GamePlayer, AtBat, Baserunner } from '@/lib/types';
 import { calculateStats, formatAvg } from '@/lib/stats';
 
 // Animation variants
@@ -28,6 +28,78 @@ const AT_BAT_BUTTONS: { result: AtBatResult; label: string; color: string; needs
   { result: 'error', label: 'Reached on Error', color: '#8B5CF6', needsRbi: true },
   { result: 'walk', label: 'Walk', color: '#F0B429', needsRbi: false },
 ];
+
+// Pitching event types
+type PitchingResult = 'k' | 'bb' | 'single' | 'double' | 'triple' | 'hr' | 'out';
+const PITCHING_BUTTONS: { result: PitchingResult; label: string; color: string; isOut: boolean; bases: number }[] = [
+  { result: 'k', label: 'Strikeout', color: '#22C55E', isOut: true, bases: 0 },
+  { result: 'out', label: 'Out (In Play)', color: '#6B7280', isOut: true, bases: 0 },
+  { result: 'bb', label: 'Walk', color: '#F0B429', isOut: false, bases: 1 },
+  { result: 'single', label: 'Single', color: '#EF4444', isOut: false, bases: 1 },
+  { result: 'double', label: 'Double', color: '#EF4444', isOut: false, bases: 2 },
+  { result: 'triple', label: 'Triple', color: '#EF4444', isOut: false, bases: 3 },
+  { result: 'hr', label: 'Home Run', color: '#F97316', isOut: false, bases: 4 },
+];
+
+// Diamond component for showing baserunners - now interactive
+function BaseDiamond({
+  baserunners,
+  gamePlayers,
+  onRunnerClick,
+  interactive = false
+}: {
+  baserunners: Baserunner[];
+  gamePlayers: (GamePlayer & { player: Player })[];
+  onRunnerClick?: (base: 1 | 2 | 3) => void;
+  interactive?: boolean;
+}) {
+  const onFirst = baserunners.find(r => r.base === 1);
+  const onSecond = baserunners.find(r => r.base === 2);
+  const onThird = baserunners.find(r => r.base === 3);
+
+  const getInitial = (pitcherId: string) => {
+    const p = gamePlayers.find(gp => gp.player_id === pitcherId);
+    return p?.player.name[0] || '?';
+  };
+
+  return (
+    <div className="relative w-32 h-32 mx-auto">
+      {/* Diamond shape */}
+      <svg viewBox="0 0 100 100" className="w-full h-full">
+        <path d="M50 10 L90 50 L50 90 L10 50 Z" fill="none" stroke="#374151" strokeWidth="2" />
+      </svg>
+      {/* Second base */}
+      <div
+        className={`absolute top-1 left-1/2 -translate-x-1/2 w-8 h-8 rounded flex items-center justify-center text-xs font-bold transition-all ${onSecond ? 'bg-[#F0B429] text-[#080D18]' : 'bg-[#162035] text-[#4A5772]'} ${interactive && onSecond ? 'cursor-pointer hover:ring-2 hover:ring-white/50 active:scale-95' : ''}`}
+        onClick={() => {
+          if (interactive && onSecond) onRunnerClick?.(2);
+        }}
+      >
+        {onSecond ? getInitial(onSecond.pitcher_id) : '2B'}
+      </div>
+      {/* Third base */}
+      <div
+        className={`absolute top-1/2 left-1 -translate-y-1/2 w-8 h-8 rounded flex items-center justify-center text-xs font-bold transition-all ${onThird ? 'bg-[#F0B429] text-[#080D18]' : 'bg-[#162035] text-[#4A5772]'} ${interactive && onThird ? 'cursor-pointer hover:ring-2 hover:ring-white/50 active:scale-95' : ''}`}
+        onClick={() => {
+          if (interactive && onThird) onRunnerClick?.(3);
+        }}
+      >
+        {onThird ? getInitial(onThird.pitcher_id) : '3B'}
+      </div>
+      {/* First base */}
+      <div
+        className={`absolute top-1/2 right-1 -translate-y-1/2 w-8 h-8 rounded flex items-center justify-center text-xs font-bold transition-all ${onFirst ? 'bg-[#F0B429] text-[#080D18]' : 'bg-[#162035] text-[#4A5772]'} ${interactive && onFirst ? 'cursor-pointer hover:ring-2 hover:ring-white/50 active:scale-95' : ''}`}
+        onClick={() => {
+          if (interactive && onFirst) onRunnerClick?.(1);
+        }}
+      >
+        {onFirst ? getInitial(onFirst.pitcher_id) : '1B'}
+      </div>
+      {/* Home plate */}
+      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-6 h-6 bg-white rotate-45" />
+    </div>
+  );
+}
 
 export default function GamePage() {
   const router = useRouter();
@@ -52,6 +124,18 @@ export default function GamePage() {
   // Leave game modal state
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaving, setLeaving] = useState(false);
+
+  // Pitching state
+  const [isPitchingMode, setIsPitchingMode] = useState(false);
+  const [currentPitcherId, setCurrentPitcherId] = useState<string | null>(null);
+  const [baserunners, setBaserunners] = useState<Baserunner[]>([]);
+  const [runsInput, setRunsInput] = useState(0);
+  const [pendingPitchingResult, setPendingPitchingResult] = useState<PitchingResult | null>(null);
+  const [pitchingStats, setPitchingStats] = useState<Record<string, { outs: number; k: number; bb: number; h: number; er: number }>>({});
+  // Manual baserunner selection for hits
+  const [manualRunners, setManualRunners] = useState<{ first: boolean; second: boolean; third: boolean }>({ first: false, second: false, third: false });
+  // Runner action popup (for caught stealing, advancing, etc.)
+  const [editingRunner, setEditingRunner] = useState<1 | 2 | 3 | null>(null);
 
   // Helper to calculate current batter for 1v1 based on total outs
   const calculateH2HBatterIndex = useCallback((atBatsData: AtBat[], numPlayers: number) => {
@@ -78,6 +162,14 @@ export default function GamePage() {
 
     setGame(gameData);
 
+    // Initialize pitching mode based on game settings
+    if (gameData.track_pitching) {
+      // If batting_first is true, we start batting (not pitching mode)
+      // If batting_first is false, we start pitching
+      setIsPitchingMode(!gameData.batting_first);
+      setCurrentPitcherId(gameData.current_pitcher_id);
+    }
+
     const { data: gamePlayersData } = await supabase
       .from('game_players')
       .select('*, player:players(*)')
@@ -93,6 +185,26 @@ export default function GamePage() {
       .order('created_at');
 
     setAtBats(atBatsData || []);
+
+    // Load pitching stats if tracking pitching
+    if (gameData.track_pitching) {
+      const { data: pitchingData } = await supabase
+        .from('pitching_stats')
+        .select('*')
+        .eq('game_id', gameId);
+
+      const stats: Record<string, { outs: number; k: number; bb: number; h: number; er: number }> = {};
+      pitchingData?.forEach(ps => {
+        stats[ps.player_id] = {
+          outs: ps.outs_recorded,
+          k: ps.strikeouts,
+          bb: ps.walks,
+          h: ps.hits_allowed,
+          er: ps.earned_runs,
+        };
+      });
+      setPitchingStats(stats);
+    }
 
     // Calculate current batter
     if (atBatsData && gamePlayersData && gamePlayersData.length > 0) {
@@ -167,6 +279,12 @@ export default function GamePage() {
         // For co-op modes, rotate every at-bat
         setCurrentBatterIndex((prev) => (prev + 1) % gamePlayers.length);
       }
+
+      // Auto-switch to pitching mode after 3 outs (if tracking pitching)
+      if (game.track_pitching && isOut && newOuts === 0) {
+        setIsPitchingMode(true);
+        setBaserunners([]);
+      }
     }
 
     // Reset input state
@@ -180,6 +298,380 @@ export default function GamePage() {
     } else {
       setPendingResult(result);
     }
+  };
+
+  // Quick record hit when bases empty - no confirmation needed
+  const recordQuickHit = async (hitType: PitchingResult) => {
+    if (!game || !currentPitcherId) return;
+
+    const buttonInfo = PITCHING_BUTTONS.find(b => b.result === hitType);
+    if (!buttonInfo) return;
+
+    // Place batter on the appropriate base
+    const newBaserunners: Baserunner[] = [];
+    if (buttonInfo.bases <= 3) {
+      newBaserunners.push({ base: buttonInfo.bases as 1 | 2 | 3, pitcher_id: currentPitcherId });
+    }
+
+    // Update current pitcher's stats
+    const { data: currentStats } = await supabase
+      .from('pitching_stats')
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('player_id', currentPitcherId)
+      .single();
+
+    const statsUpdate = {
+      outs_recorded: currentStats?.outs_recorded || 0,
+      strikeouts: currentStats?.strikeouts || 0,
+      walks: currentStats?.walks || 0,
+      hits_allowed: (currentStats?.hits_allowed || 0) + 1,
+    };
+
+    if (currentStats) {
+      await supabase.from('pitching_stats').update(statsUpdate).eq('id', currentStats.id);
+    } else {
+      await supabase.from('pitching_stats').insert({
+        game_id: gameId,
+        player_id: currentPitcherId,
+        ...statsUpdate,
+        earned_runs: 0,
+      });
+    }
+
+    // Update local pitching stats
+    const newPitchingStats = { ...pitchingStats };
+    if (!newPitchingStats[currentPitcherId]) {
+      newPitchingStats[currentPitcherId] = { outs: 0, k: 0, bb: 0, h: 0, er: 0 };
+    }
+    newPitchingStats[currentPitcherId].h += 1;
+    setPitchingStats(newPitchingStats);
+
+    setBaserunners(newBaserunners);
+  };
+
+  // Handle runner actions (move to different base or mark out)
+  const handleRunnerAction = async (action: 'out' | 'advance' | 'score', targetBase?: 2 | 3) => {
+    if (!editingRunner || !game) return;
+
+    const runner = baserunners.find(r => r.base === editingRunner);
+    if (!runner) return;
+
+    let newBaserunners = baserunners.filter(r => r.base !== editingRunner);
+    let newOuts = game.current_outs;
+    let newInning = game.current_inning;
+
+    if (action === 'out') {
+      // Runner caught stealing / picked off
+      newOuts++;
+      if (newOuts >= 3) {
+        newOuts = 0;
+        newInning++;
+        newBaserunners = [];
+        // Auto-switch to batting after 3 outs
+        setIsPitchingMode(false);
+      }
+
+      // Update game state
+      await supabase
+        .from('games')
+        .update({ current_outs: newOuts, current_inning: newInning })
+        .eq('id', gameId);
+
+      setGame({ ...game, current_outs: newOuts, current_inning: newInning });
+    } else if (action === 'advance' && targetBase) {
+      // Move runner to target base (if not occupied)
+      const targetOccupied = baserunners.some(r => r.base === targetBase);
+      if (!targetOccupied) {
+        newBaserunners.push({ base: targetBase, pitcher_id: runner.pitcher_id });
+      }
+    } else if (action === 'score') {
+      // Runner scored - attribute to pitcher who put them on
+      if (currentPitcherId) {
+        const { data: existingStats } = await supabase
+          .from('pitching_stats')
+          .select('*')
+          .eq('game_id', gameId)
+          .eq('player_id', runner.pitcher_id)
+          .single();
+
+        if (existingStats) {
+          await supabase
+            .from('pitching_stats')
+            .update({ earned_runs: existingStats.earned_runs + 1 })
+            .eq('id', existingStats.id);
+        } else {
+          await supabase.from('pitching_stats').insert({
+            game_id: gameId,
+            player_id: runner.pitcher_id,
+            earned_runs: 1,
+          });
+        }
+
+        // Update local stats
+        const newPitchingStats = { ...pitchingStats };
+        if (!newPitchingStats[runner.pitcher_id]) {
+          newPitchingStats[runner.pitcher_id] = { outs: 0, k: 0, bb: 0, h: 0, er: 0 };
+        }
+        newPitchingStats[runner.pitcher_id].er += 1;
+        setPitchingStats(newPitchingStats);
+      }
+    }
+
+    setBaserunners(newBaserunners);
+    setEditingRunner(null);
+  };
+
+  // Calculate runs scored based on hit type and runners on base
+  const calculateRunsFromHit = (hitType: PitchingResult, runners: Baserunner[]): { runsScored: number; runsByPitcher: Record<string, number>; newRunners: Baserunner[] } => {
+    const buttonInfo = PITCHING_BUTTONS.find(b => b.result === hitType);
+    if (!buttonInfo || buttonInfo.isOut) {
+      return { runsScored: 0, runsByPitcher: {}, newRunners: runners };
+    }
+
+    const bases = buttonInfo.bases;
+    let runsScored = 0;
+    const runsByPitcher: Record<string, number> = {};
+    let newRunners: Baserunner[] = [];
+
+    if (bases === 4) {
+      // Home run - everyone scores
+      runsScored = runners.length + 1; // runners + batter
+      runners.forEach(r => {
+        runsByPitcher[r.pitcher_id] = (runsByPitcher[r.pitcher_id] || 0) + 1;
+      });
+      // Batter scores too - attribute to current pitcher
+      runsByPitcher[currentPitcherId!] = (runsByPitcher[currentPitcherId!] || 0) + 1;
+      newRunners = [];
+    } else {
+      // Advance runners by hit bases
+      const sortedRunners = [...runners].sort((a, b) => b.base - a.base);
+
+      for (const runner of sortedRunners) {
+        const newBase = runner.base + bases;
+        if (newBase > 3) {
+          // Runner scores
+          runsScored++;
+          runsByPitcher[runner.pitcher_id] = (runsByPitcher[runner.pitcher_id] || 0) + 1;
+        } else {
+          newRunners.push({ base: newBase as 1 | 2 | 3, pitcher_id: runner.pitcher_id });
+        }
+      }
+
+      // Add batter to appropriate base
+      if (bases <= 3) {
+        newRunners.push({ base: bases as 1 | 2 | 3, pitcher_id: currentPitcherId! });
+      }
+    }
+
+    return { runsScored, runsByPitcher, newRunners };
+  };
+
+  // Record pitching event
+  const recordPitchingEvent = async () => {
+    if (!pendingPitchingResult || !game || !currentPitcherId) return;
+
+    const buttonInfo = PITCHING_BUTTONS.find(b => b.result === pendingPitchingResult);
+    const isOut = buttonInfo?.isOut || false;
+    const isHit = ['single', 'double', 'triple', 'hr'].includes(pendingPitchingResult);
+    const isWalk = pendingPitchingResult === 'bb';
+
+    let newOuts = game.current_outs;
+    let newInning = game.current_inning;
+    let newBaserunners = [...baserunners];
+
+    // Calculate runs and new baserunner positions
+    let totalRuns = runsInput;
+    let runsByPitcher: Record<string, number> = {};
+
+    if (isHit) {
+      if (pendingPitchingResult === 'hr') {
+        // Home run - everyone scores, bases cleared
+        newBaserunners = [];
+        totalRuns = baserunners.length + 1; // All runners + batter
+        // Attribute runs to each pitcher
+        baserunners.forEach(r => {
+          runsByPitcher[r.pitcher_id] = (runsByPitcher[r.pitcher_id] || 0) + 1;
+        });
+        // Batter scores too
+        runsByPitcher[currentPitcherId] = (runsByPitcher[currentPitcherId] || 0) + 1;
+      } else {
+        // Use manual runner positions
+        newBaserunners = [];
+        if (manualRunners.first) {
+          newBaserunners.push({ base: 1, pitcher_id: currentPitcherId });
+        }
+        if (manualRunners.second) {
+          // Find who was closest to second (runner from 1st or batter)
+          const runnerFrom1st = baserunners.find(r => r.base === 1);
+          newBaserunners.push({ base: 2, pitcher_id: runnerFrom1st?.pitcher_id || currentPitcherId });
+        }
+        if (manualRunners.third) {
+          // Find who was closest to third
+          const runnerFrom2nd = baserunners.find(r => r.base === 2);
+          const runnerFrom1st = baserunners.find(r => r.base === 1);
+          newBaserunners.push({ base: 3, pitcher_id: runnerFrom2nd?.pitcher_id || runnerFrom1st?.pitcher_id || currentPitcherId });
+        }
+
+        // Attribute runs to pitchers who put runners on base
+        if (totalRuns > 0) {
+          // Sort by base descending (3rd scores first, then 2nd, then 1st)
+          const sortedRunners = [...baserunners].sort((a, b) => b.base - a.base);
+          for (let i = 0; i < Math.min(totalRuns, sortedRunners.length); i++) {
+            const runner = sortedRunners[i];
+            runsByPitcher[runner.pitcher_id] = (runsByPitcher[runner.pitcher_id] || 0) + 1;
+          }
+          // If more runs than runners on base, batter also scored
+          if (totalRuns > baserunners.length) {
+            runsByPitcher[currentPitcherId] = (runsByPitcher[currentPitcherId] || 0) + (totalRuns - baserunners.length);
+          }
+        }
+      }
+    } else if (isWalk) {
+      // Walk - advance runners if forced
+      const onFirst = baserunners.find(r => r.base === 1);
+      const onSecond = baserunners.find(r => r.base === 2);
+      const onThird = baserunners.find(r => r.base === 3);
+
+      if (onFirst && onSecond && onThird) {
+        // Bases loaded - runner on 3rd scores
+        totalRuns = runsInput > 0 ? runsInput : 1;
+        runsByPitcher[onThird.pitcher_id] = 1;
+        newBaserunners = [
+          { base: 1, pitcher_id: currentPitcherId },
+          { base: 2, pitcher_id: onFirst.pitcher_id },
+          { base: 3, pitcher_id: onSecond.pitcher_id },
+        ];
+      } else if (onFirst && onSecond) {
+        newBaserunners = [
+          { base: 1, pitcher_id: currentPitcherId },
+          { base: 2, pitcher_id: onFirst.pitcher_id },
+          { base: 3, pitcher_id: onSecond.pitcher_id },
+        ];
+      } else if (onFirst) {
+        newBaserunners = [
+          { base: 1, pitcher_id: currentPitcherId },
+          { base: 2, pitcher_id: onFirst.pitcher_id },
+          ...(onThird ? [onThird] : []),
+        ];
+      } else {
+        newBaserunners = [
+          { base: 1, pitcher_id: currentPitcherId },
+          ...(onSecond ? [onSecond] : []),
+          ...(onThird ? [onThird] : []),
+        ];
+      }
+    } else if (isOut) {
+      newOuts++;
+      if (newOuts >= 3) {
+        newOuts = 0;
+        newInning++;
+        newBaserunners = [];
+      }
+      // Attribute runs to the pitchers who put runners on
+      if (totalRuns > 0) {
+        const sortedRunners = [...baserunners].sort((a, b) => b.base - a.base);
+        for (let i = 0; i < Math.min(totalRuns, sortedRunners.length); i++) {
+          const runner = sortedRunners[i];
+          runsByPitcher[runner.pitcher_id] = (runsByPitcher[runner.pitcher_id] || 0) + 1;
+        }
+      }
+    }
+
+    // Update pitching stats for each pitcher who gave up runs
+    for (const [pitcherId, runs] of Object.entries(runsByPitcher)) {
+      const { data: existingStats } = await supabase
+        .from('pitching_stats')
+        .select('*')
+        .eq('game_id', gameId)
+        .eq('player_id', pitcherId)
+        .single();
+
+      if (existingStats) {
+        await supabase
+          .from('pitching_stats')
+          .update({ earned_runs: existingStats.earned_runs + runs })
+          .eq('id', existingStats.id);
+      } else {
+        await supabase.from('pitching_stats').insert({
+          game_id: gameId,
+          player_id: pitcherId,
+          earned_runs: runs,
+        });
+      }
+    }
+
+    // Update current pitcher's stats (K, BB, hits, outs)
+    const { data: currentStats } = await supabase
+      .from('pitching_stats')
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('player_id', currentPitcherId)
+      .single();
+
+    const statsUpdate = {
+      outs_recorded: (currentStats?.outs_recorded || 0) + (isOut ? 1 : 0),
+      strikeouts: (currentStats?.strikeouts || 0) + (pendingPitchingResult === 'k' ? 1 : 0),
+      walks: (currentStats?.walks || 0) + (isWalk ? 1 : 0),
+      hits_allowed: (currentStats?.hits_allowed || 0) + (isHit ? 1 : 0),
+    };
+
+    if (currentStats) {
+      await supabase.from('pitching_stats').update(statsUpdate).eq('id', currentStats.id);
+    } else {
+      await supabase.from('pitching_stats').insert({
+        game_id: gameId,
+        player_id: currentPitcherId,
+        ...statsUpdate,
+        earned_runs: runsByPitcher[currentPitcherId] || 0,
+      });
+    }
+
+    // Update game state
+    await supabase
+      .from('games')
+      .update({ current_outs: newOuts, current_inning: newInning, current_pitcher_id: currentPitcherId })
+      .eq('id', gameId);
+
+    setGame({ ...game, current_outs: newOuts, current_inning: newInning, current_pitcher_id: currentPitcherId });
+    setBaserunners(newBaserunners);
+
+    // Update local pitching stats for display
+    const newPitchingStats = { ...pitchingStats };
+
+    // Update current pitcher's stats
+    if (!newPitchingStats[currentPitcherId]) {
+      newPitchingStats[currentPitcherId] = { outs: 0, k: 0, bb: 0, h: 0, er: 0 };
+    }
+    newPitchingStats[currentPitcherId] = {
+      outs: newPitchingStats[currentPitcherId].outs + (isOut ? 1 : 0),
+      k: newPitchingStats[currentPitcherId].k + (pendingPitchingResult === 'k' ? 1 : 0),
+      bb: newPitchingStats[currentPitcherId].bb + (isWalk ? 1 : 0),
+      h: newPitchingStats[currentPitcherId].h + (isHit ? 1 : 0),
+      er: newPitchingStats[currentPitcherId].er + (runsByPitcher[currentPitcherId] || 0),
+    };
+
+    // Update earned runs for other pitchers
+    for (const [pitcherId, runs] of Object.entries(runsByPitcher)) {
+      if (pitcherId !== currentPitcherId) {
+        if (!newPitchingStats[pitcherId]) {
+          newPitchingStats[pitcherId] = { outs: 0, k: 0, bb: 0, h: 0, er: 0 };
+        }
+        newPitchingStats[pitcherId].er += runs;
+      }
+    }
+
+    setPitchingStats(newPitchingStats);
+
+    // Auto-switch to batting mode after 3 outs
+    if (isOut && newOuts === 0) {
+      setIsPitchingMode(false);
+    }
+
+    // Reset
+    setPendingPitchingResult(null);
+    setRunsInput(0);
+    setManualRunners({ first: false, second: false, third: false });
   };
 
   const undoLastAtBat = async () => {
@@ -460,8 +952,35 @@ export default function GamePage() {
           <div className="text-[11px] text-[#4A5772]">
             Inning {game.current_inning}
             {game.game_mode === '1v1' && ' · Head to Head'}
+            {game.track_pitching && (isPitchingMode ? ' · Pitching' : ' · Batting')}
           </div>
         </div>
+
+        {/* Mode toggle for pitching games */}
+        {game.track_pitching && (
+          <div className="flex rounded-lg overflow-hidden mr-3" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+            <button
+              onClick={() => setIsPitchingMode(false)}
+              className="px-3 py-1.5 text-xs font-semibold"
+              style={{
+                background: !isPitchingMode ? '#60A5FA' : 'transparent',
+                color: !isPitchingMode ? '#080D18' : '#8A9BBB',
+              }}
+            >
+              BAT
+            </button>
+            <button
+              onClick={() => setIsPitchingMode(true)}
+              className="px-3 py-1.5 text-xs font-semibold"
+              style={{
+                background: isPitchingMode ? '#EF4444' : 'transparent',
+                color: isPitchingMode ? '#FFF' : '#8A9BBB',
+              }}
+            >
+              PITCH
+            </button>
+          </div>
+        )}
 
         {/* Outs indicator in header */}
         <div className="flex items-center gap-2">
@@ -480,37 +999,385 @@ export default function GamePage() {
       </div>
 
       <div className="max-w-2xl mx-auto p-5 space-y-5">
-        {/* Current Batter */}
-        <motion.div
-          custom={0}
-          variants={fadeUp}
-          initial="hidden"
-          animate="visible"
-          className="text-center py-8 rounded-xl"
-          style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
-        >
-          <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2">Now Batting</div>
-          <div
-            className="w-16 h-16 rounded-xl flex items-center justify-center text-2xl font-bold mx-auto mb-3"
-            style={{ background: '#162035', color: '#F0B429' }}
+        {/* Pitching Mode: Pitcher Selector + Diamond */}
+        {isPitchingMode && game.track_pitching ? (
+          <motion.div
+            custom={0}
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            className="rounded-xl p-5"
+            style={{ background: '#0F1829', border: '1px solid rgba(239,68,68,0.2)' }}
           >
-            {currentPlayer.player.name[0]}
-          </div>
-          <div className="text-3xl font-bold text-[#EFF2FF]">{currentPlayer.player.name}</div>
-          <div className="text-sm text-[#4A5772] mt-2">
-            {(() => {
-              const stats = calculateStats(
-                currentPlayer.player_id,
-                currentPlayer.player.name,
-                atBats
-              );
-              return `${stats.hits}-${stats.at_bats} (${formatAvg(stats.avg)}) this game`;
-            })()}
-          </div>
-        </motion.div>
+            <div className="flex gap-5">
+              {/* Pitcher selector */}
+              <div className="flex-1">
+                <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3">Pitching</div>
+                <div className="flex flex-col gap-2">
+                  {gamePlayers.map((gp) => (
+                    <motion.button
+                      key={gp.player_id}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setCurrentPitcherId(gp.player_id)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
+                      style={{
+                        background: currentPitcherId === gp.player_id ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.05)',
+                        border: `2px solid ${currentPitcherId === gp.player_id ? '#EF4444' : 'rgba(255,255,255,0.1)'}`,
+                        color: currentPitcherId === gp.player_id ? '#EF4444' : '#8A9BBB',
+                      }}
+                    >
+                      <div
+                        className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
+                        style={{ background: '#162035', color: currentPitcherId === gp.player_id ? '#EF4444' : '#8A9BBB' }}
+                      >
+                        {gp.player.name[0]}
+                      </div>
+                      {gp.player.name}
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
 
-        {/* At-Bat Buttons or RBI Input */}
-        {!pendingResult ? (
+              {/* Diamond showing baserunners - tap to manage */}
+              <div className="flex-shrink-0 relative">
+                <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 text-center">
+                  {baserunners.length > 0 ? 'Tap runner' : 'Bases'}
+                </div>
+                <BaseDiamond
+                  baserunners={baserunners}
+                  gamePlayers={gamePlayers}
+                  interactive={true}
+                  onRunnerClick={(base) => setEditingRunner(base)}
+                />
+                <div className="text-center mt-2 text-xs text-[#4A5772]">
+                  {baserunners.length === 0 ? 'Empty' : `${baserunners.length} on`}
+                </div>
+
+                {/* Runner action popup */}
+                {editingRunner && (
+                  <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center z-10">
+                    <div
+                      className="rounded-lg p-3 shadow-xl"
+                      style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.2)' }}
+                    >
+                      <div className="text-xs text-[#8A9BBB] mb-2 text-center">
+                        Runner on {editingRunner === 1 ? '1st' : editingRunner === 2 ? '2nd' : '3rd'}
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {/* Move options */}
+                        {editingRunner === 1 && !baserunners.some(r => r.base === 2) && (
+                          <button
+                            onClick={() => handleRunnerAction('advance', 2)}
+                            className="px-3 py-1.5 rounded text-xs font-medium bg-[#60A5FA]/20 text-[#60A5FA] hover:bg-[#60A5FA]/30"
+                          >
+                            → 2nd (Steal)
+                          </button>
+                        )}
+                        {editingRunner === 1 && !baserunners.some(r => r.base === 3) && (
+                          <button
+                            onClick={() => handleRunnerAction('advance', 3)}
+                            className="px-3 py-1.5 rounded text-xs font-medium bg-[#60A5FA]/20 text-[#60A5FA] hover:bg-[#60A5FA]/30"
+                          >
+                            → 3rd
+                          </button>
+                        )}
+                        {editingRunner === 2 && !baserunners.some(r => r.base === 3) && (
+                          <button
+                            onClick={() => handleRunnerAction('advance', 3)}
+                            className="px-3 py-1.5 rounded text-xs font-medium bg-[#60A5FA]/20 text-[#60A5FA] hover:bg-[#60A5FA]/30"
+                          >
+                            → 3rd (Steal)
+                          </button>
+                        )}
+                        {editingRunner === 2 && (
+                          <button
+                            onClick={() => handleRunnerAction('score')}
+                            className="px-3 py-1.5 rounded text-xs font-medium bg-[#22C55E]/20 text-[#22C55E] hover:bg-[#22C55E]/30"
+                          >
+                            Scored
+                          </button>
+                        )}
+                        {editingRunner === 3 && (
+                          <button
+                            onClick={() => handleRunnerAction('score')}
+                            className="px-3 py-1.5 rounded text-xs font-medium bg-[#22C55E]/20 text-[#22C55E] hover:bg-[#22C55E]/30"
+                          >
+                            Scored / Steal Home
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleRunnerAction('out')}
+                          className="px-3 py-1.5 rounded text-xs font-medium bg-[#EF4444]/20 text-[#EF4444] hover:bg-[#EF4444]/30"
+                        >
+                          Out (CS/PO)
+                        </button>
+                        <button
+                          onClick={() => setEditingRunner(null)}
+                          className="px-3 py-1.5 rounded text-xs font-medium bg-[#4A5772]/20 text-[#8A9BBB] hover:bg-[#4A5772]/30"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          /* Current Batter */
+          <motion.div
+            custom={0}
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            className="text-center py-8 rounded-xl"
+            style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
+          >
+            <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2">Now Batting</div>
+            <div
+              className="w-16 h-16 rounded-xl flex items-center justify-center text-2xl font-bold mx-auto mb-3"
+              style={{ background: '#162035', color: '#F0B429' }}
+            >
+              {currentPlayer.player.name[0]}
+            </div>
+            <div className="text-3xl font-bold text-[#EFF2FF]">{currentPlayer.player.name}</div>
+            <div className="text-sm text-[#4A5772] mt-2">
+              {(() => {
+                const stats = calculateStats(
+                  currentPlayer.player_id,
+                  currentPlayer.player.name,
+                  atBats
+                );
+                return `${stats.hits}-${stats.at_bats} (${formatAvg(stats.avg)}) this game`;
+              })()}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Pitching Buttons or At-Bat Buttons */}
+        {isPitchingMode && game.track_pitching ? (
+          /* Pitching Mode Buttons */
+          !pendingPitchingResult ? (
+            <motion.div
+              custom={1}
+              variants={fadeUp}
+              initial="hidden"
+              animate="visible"
+              className="space-y-3"
+            >
+              {/* Outs row */}
+              <div className="grid grid-cols-2 gap-3">
+                {PITCHING_BUTTONS.filter(b => b.isOut).map(({ result, label, color }) => (
+                  <motion.button
+                    key={result}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      if (!currentPitcherId) {
+                        alert('Select a pitcher first');
+                        return;
+                      }
+                      setPendingPitchingResult(result);
+                    }}
+                    className="py-4 rounded-xl font-bold text-base transition-all"
+                    style={{
+                      background: `${color}20`,
+                      border: `1px solid ${color}50`,
+                      color: color,
+                      opacity: currentPitcherId ? 1 : 0.5,
+                    }}
+                  >
+                    {label}
+                  </motion.button>
+                ))}
+              </div>
+              {/* Hits row */}
+              <div className="grid grid-cols-4 gap-2">
+                {PITCHING_BUTTONS.filter(b => !b.isOut && b.result !== 'bb').map(({ result, label, color, bases }) => (
+                  <motion.button
+                    key={result}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      if (!currentPitcherId) {
+                        alert('Select a pitcher first');
+                        return;
+                      }
+                      // If bases empty and not HR, just record it immediately
+                      if (baserunners.length === 0 && result !== 'hr') {
+                        recordQuickHit(result);
+                      } else {
+                        // Has runners or HR - need confirmation
+                        // Pre-select batter's base position
+                        if (result !== 'hr') {
+                          setManualRunners({
+                            first: bases === 1,
+                            second: bases === 2,
+                            third: bases === 3,
+                          });
+                        }
+                        setRunsInput(0);
+                        setPendingPitchingResult(result);
+                      }
+                    }}
+                    className="py-3 rounded-lg font-semibold text-sm transition-all"
+                    style={{
+                      background: `${color}20`,
+                      border: `1px solid ${color}50`,
+                      color: color,
+                      opacity: currentPitcherId ? 1 : 0.5,
+                    }}
+                  >
+                    {label.replace(' ', '\n')}
+                  </motion.button>
+                ))}
+              </div>
+              {/* Walk button */}
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => {
+                  if (!currentPitcherId) {
+                    alert('Select a pitcher first');
+                    return;
+                  }
+                  setPendingPitchingResult('bb');
+                }}
+                className="w-full py-3 rounded-xl font-bold text-base transition-all"
+                style={{
+                  background: '#F0B42920',
+                  border: '1px solid #F0B42950',
+                  color: '#F0B429',
+                  opacity: currentPitcherId ? 1 : 0.5,
+                }}
+              >
+                Walk (BB)
+              </motion.button>
+            </motion.div>
+          ) : (
+            /* Confirm pitching event */
+            <motion.div
+              custom={1}
+              variants={fadeUp}
+              initial="hidden"
+              animate="visible"
+              className="rounded-xl p-5 space-y-4"
+              style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
+            >
+              <div className="text-center">
+                <div
+                  className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-3"
+                  style={{
+                    background: `${PITCHING_BUTTONS.find(b => b.result === pendingPitchingResult)?.color}30`,
+                    color: PITCHING_BUTTONS.find(b => b.result === pendingPitchingResult)?.color,
+                  }}
+                >
+                  {PITCHING_BUTTONS.find(b => b.result === pendingPitchingResult)?.label}
+                </div>
+
+                {/* For HR: just confirm, all runs auto-calculated */}
+                {pendingPitchingResult === 'hr' && (
+                  <div className="text-sm text-[#22C55E] font-medium">
+                    {baserunners.length + 1} run{baserunners.length > 0 ? 's' : ''} will score
+                  </div>
+                )}
+
+                {/* For hits with runners: ask runs scored and where runners ended up */}
+                {['single', 'double', 'triple'].includes(pendingPitchingResult!) && baserunners.length > 0 && (
+                  <>
+                    {/* Runs scored */}
+                    <div className="text-sm text-[#EFF2FF] font-medium mb-2">How many scored?</div>
+                    <div className="flex justify-center gap-2 mb-4">
+                      {[0, 1, 2, 3].slice(0, baserunners.length + 1).map((num) => (
+                        <motion.button
+                          key={num}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setRunsInput(num)}
+                          className="w-12 h-12 rounded-lg font-bold text-lg transition-all"
+                          style={{
+                            background: runsInput === num ? '#EF4444' : '#162035',
+                            color: runsInput === num ? '#FFF' : '#8A9BBB',
+                            border: `1px solid ${runsInput === num ? '#EF4444' : 'rgba(255,255,255,0.1)'}`,
+                          }}
+                        >
+                          {num}
+                        </motion.button>
+                      ))}
+                    </div>
+
+                    {/* Baserunner positions after the play */}
+                    <div className="text-sm text-[#EFF2FF] font-medium mb-2">Who&apos;s on base now?</div>
+                    <div className="flex justify-center gap-3">
+                      {[
+                        { key: 'first', label: '1B' },
+                        { key: 'second', label: '2B' },
+                        { key: 'third', label: '3B' },
+                      ].map(({ key, label }) => (
+                        <motion.button
+                          key={key}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setManualRunners(prev => ({ ...prev, [key]: !prev[key as keyof typeof prev] }))}
+                          className="w-14 h-14 rounded-lg font-bold text-sm transition-all"
+                          style={{
+                            background: manualRunners[key as keyof typeof manualRunners] ? '#F0B429' : '#162035',
+                            color: manualRunners[key as keyof typeof manualRunners] ? '#080D18' : '#8A9BBB',
+                            border: `1px solid ${manualRunners[key as keyof typeof manualRunners] ? '#F0B429' : 'rgba(255,255,255,0.1)'}`,
+                          }}
+                        >
+                          {label}
+                        </motion.button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* For outs: ask if any runs scored */}
+                {PITCHING_BUTTONS.find(b => b.result === pendingPitchingResult)?.isOut && baserunners.length > 0 && (
+                  <>
+                    <div className="text-sm text-[#EFF2FF] font-medium mb-2">Runs scored on the play?</div>
+                    <div className="flex justify-center gap-2">
+                      {[0, 1, 2, 3].map((num) => (
+                        <motion.button
+                          key={num}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setRunsInput(num)}
+                          className="w-12 h-12 rounded-lg font-bold text-lg transition-all"
+                          style={{
+                            background: runsInput === num ? '#EF4444' : '#162035',
+                            color: runsInput === num ? '#FFF' : '#8A9BBB',
+                            border: `1px solid ${runsInput === num ? '#EF4444' : 'rgba(255,255,255,0.1)'}`,
+                          }}
+                        >
+                          {num}
+                        </motion.button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => {
+                    setPendingPitchingResult(null);
+                    setRunsInput(0);
+                    setManualRunners({ first: false, second: false, third: false });
+                  }}
+                  className="flex-1 py-3 rounded-xl font-semibold"
+                  style={{ background: '#162035', color: '#8A9BBB', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={recordPitchingEvent}
+                  className="flex-1 py-3 rounded-xl font-semibold"
+                  style={{ background: '#22C55E', color: '#080D18' }}
+                >
+                  Confirm
+                </motion.button>
+              </div>
+            </motion.div>
+          )
+        ) : !pendingResult ? (
           <motion.div
             custom={1}
             variants={fadeUp}
@@ -629,7 +1496,7 @@ export default function GamePage() {
           </motion.div>
         )}
 
-        {/* Game Stats Summary */}
+        {/* Batting Stats Summary */}
         <motion.div
           custom={2}
           variants={fadeUp}
@@ -638,7 +1505,7 @@ export default function GamePage() {
           className="rounded-xl p-4"
           style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
         >
-          <h3 className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3">This Game</h3>
+          <h3 className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3">Batting</h3>
           <div className="space-y-2">
             {gamePlayers.map((gp) => {
               const stats = calculateStats(gp.player_id, gp.player.name, atBats);
@@ -662,6 +1529,56 @@ export default function GamePage() {
             })}
           </div>
         </motion.div>
+
+        {/* Pitching Stats Summary */}
+        {game.track_pitching && (
+          <motion.div
+            custom={2.5}
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            className="rounded-xl p-4"
+            style={{ background: '#0F1829', border: '1px solid rgba(239,68,68,0.2)' }}
+          >
+            <h3 className="text-[11px] text-[#EF4444] uppercase tracking-widest mb-3">Pitching</h3>
+            <div className="space-y-2">
+              {gamePlayers.map((gp) => {
+                const ps = pitchingStats[gp.player_id] || { outs: 0, k: 0, bb: 0, h: 0, er: 0 };
+                const innings = Math.floor(ps.outs / 3);
+                const partialOuts = ps.outs % 3;
+                const ipDisplay = partialOuts > 0 ? `${innings}.${partialOuts}` : `${innings}.0`;
+                // ERA = (earned runs / outs) * 27 (for 9 innings * 3 outs)
+                const era = ps.outs > 0 ? (ps.er / ps.outs) * 27 : 0;
+
+                // Only show if pitcher has recorded any stats
+                if (ps.outs === 0 && ps.k === 0 && ps.bb === 0 && ps.h === 0) return null;
+
+                return (
+                  <div key={gp.id} className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
+                        style={{ background: 'rgba(239,68,68,0.15)', color: '#EF4444' }}
+                      >
+                        {gp.player.name[0]}
+                      </div>
+                      <span className="text-sm font-medium text-[#EFF2FF]">{gp.player.name}</span>
+                    </div>
+                    <span className="text-sm text-[#8A9BBB] tabular-nums">
+                      {ipDisplay} IP, {ps.k} K, {ps.bb} BB, {ps.h} H, {ps.er} ER
+                      <span className="text-[#EF4444] ml-2">({era.toFixed(2)} ERA)</span>
+                    </span>
+                  </div>
+                );
+              })}
+              {Object.keys(pitchingStats).length === 0 && (
+                <div className="text-sm text-[#4A5772] text-center py-2">
+                  No pitching stats yet
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Recent At-Bats */}
         {atBats.length > 0 && (
