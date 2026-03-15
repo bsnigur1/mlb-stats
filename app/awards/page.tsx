@@ -20,14 +20,24 @@ const fadeUp = {
 // Memorable moments (hardcoded special achievements)
 const MEMORABLE_MOMENTS = [
   {
-    id: 'longest-hr',
-    title: 'Longest Homerun',
-    player: 'Bryan',
-    description: 'Giancarlo Stanton',
-    detail: '526 feet',
-    date: 'March 6th',
+    id: 'back-to-back-hrs',
+    title: 'Back-to-Back-to-Back-to-Back-to-Back HRs',
+    player: 'Bryan & Greg',
+    description: '5 consecutive homers',
+    detail: '5 HRs in a row',
+    date: 'March 15, 2026',
+    icon: Zap,
+    color: '#F0B429',
+  },
+  {
+    id: '7-hr-game',
+    title: '7 Homerun Game',
+    player: 'Greg',
+    description: 'Single game record',
+    detail: '7 HRs',
+    date: 'March 15, 2026',
     icon: Target,
-    color: '#F97316',
+    color: '#EF4444',
   },
   {
     id: 'perfect-game',
