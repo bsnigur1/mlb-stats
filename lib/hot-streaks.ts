@@ -38,7 +38,7 @@ export function calculateHotStreaks(
         streaks.push({
           type: 'hr',
           label: `${stats.homeruns} HRs`,
-          value: stats.homeruns,
+          value: String(stats.homeruns),
           timeframe: `last ${gameCount} game${gameCount > 1 ? 's' : ''}`,
         });
       }
@@ -48,7 +48,7 @@ export function calculateHotStreaks(
         streaks.push({
           type: 'rbi',
           label: `${stats.rbi} RBIs`,
-          value: stats.rbi,
+          value: String(stats.rbi),
           timeframe: `last ${gameCount} game${gameCount > 1 ? 's' : ''}`,
         });
       }
@@ -58,7 +58,7 @@ export function calculateHotStreaks(
         streaks.push({
           type: 'avg',
           label: `${formatAvg(stats.avg)} AVG`,
-          value: stats.avg,
+          value: String(stats.avg),
           timeframe: `last ${gameCount} game${gameCount > 1 ? 's' : ''}`,
         });
       }
@@ -83,11 +83,11 @@ export function calculateHotStreaks(
       if (sessionStats.homeruns >= THRESHOLDS.HR_RECENT_GAMES) {
         // Avoid duplicate if already shown in recent games
         const existingHr = streaks.find((s) => s.type === 'hr');
-        if (!existingHr || existingHr.value !== sessionStats.homeruns) {
+        if (!existingHr || existingHr.value !== String(sessionStats.homeruns)) {
           streaks.push({
             type: 'hr',
             label: `${sessionStats.homeruns} HRs`,
-            value: sessionStats.homeruns,
+            value: String(sessionStats.homeruns),
             timeframe: 'last session',
           });
         }
@@ -96,11 +96,11 @@ export function calculateHotStreaks(
       // RBIs last session
       if (sessionStats.rbi >= THRESHOLDS.RBI_SESSION) {
         const existingRbi = streaks.find((s) => s.type === 'rbi');
-        if (!existingRbi || existingRbi.value !== sessionStats.rbi) {
+        if (!existingRbi || existingRbi.value !== String(sessionStats.rbi)) {
           streaks.push({
             type: 'rbi',
             label: `${sessionStats.rbi} RBIs`,
-            value: sessionStats.rbi,
+            value: String(sessionStats.rbi),
             timeframe: 'last session',
           });
         }
@@ -113,7 +113,7 @@ export function calculateHotStreaks(
           streaks.push({
             type: 'avg',
             label: `${formatAvg(sessionStats.avg)} AVG`,
-            value: sessionStats.avg,
+            value: String(sessionStats.avg),
             timeframe: 'last session',
           });
         }
@@ -137,7 +137,7 @@ export function calculateHotStreaks(
     streaks.push({
       type: 'hitting_streak',
       label: `${hittingStreak}-game hit streak`,
-      value: hittingStreak,
+      value: String(hittingStreak),
       timeframe: '',
     });
   }
