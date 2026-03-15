@@ -676,6 +676,35 @@ export default function Dashboard() {
                 />
               ))}
             </div>
+
+            {/* 2026 Achievements */}
+            <div className="mt-6">
+              <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                <Award size={11} color="#F0B429" />
+                2026 Achievements
+              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3.5 rounded-lg"
+                style={{
+                  background: '#0F1829',
+                  border: '1px solid rgba(240,180,41,0.2)',
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div
+                    className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
+                    style={{ background: 'rgba(240,180,41,0.15)', color: '#F0B429' }}
+                  >
+                    B
+                  </div>
+                  <span className="text-sm font-semibold text-[#EFF2FF]">Bryan</span>
+                </div>
+                <div className="text-sm text-[#F0B429] font-bold">443 Foot Homerun</div>
+                <div className="text-xs text-[#4A5772] mt-0.5">Using Stanton · March 6</div>
+              </motion.div>
+            </div>
           </div>
         </div>
       </div>
