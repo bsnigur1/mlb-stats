@@ -5,7 +5,8 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, User, Zap, Minus, ChevronRight, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Player, AtBat, Game } from '@/lib/types';
+import { Player, AtBat, Game, Session, HotStreak } from '@/lib/types';
+import { calculateHotStreaks, formatHotStreak } from '@/lib/hot-streaks';
 
 // Animation variants
 const fadeUp = {
@@ -62,13 +63,16 @@ function PlayerCard({
   stats,
   rank,
   index,
+  hotStreaks,
 }: {
   player: Player;
   stats: { avg: number; hr: number; rbi: number; games: number };
   rank: number;
   index: number;
+  hotStreaks: HotStreak[];
 }) {
-  const isHot = player.heat === 'hot';
+  const isHot = hotStreaks.length > 0;
+  const topStreak = hotStreaks[0];
 
   return (
     <Link href={`/players/${player.id}`}>
@@ -106,11 +110,15 @@ function PlayerCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-base font-semibold text-[#EFF2FF]">{player.name}</span>
-            <HeatBadge heat={player.heat} streak={player.streak} streakType={player.streak_type} />
           </div>
-          <div className="text-xs text-[#4A5772]">
-            {player.handle || `${stats.games} games`}
-          </div>
+          {topStreak ? (
+            <div className="flex items-center gap-1 text-xs">
+              <Zap size={10} color="#F0B429" fill="#F0B429" />
+              <span className="font-semibold text-[#F0B429]">{formatHotStreak(topStreak)}</span>
+            </div>
+          ) : (
+            <div className="text-xs text-[#4A5772]">{stats.games} games</div>
+          )}
         </div>
 
         <div className="flex items-center gap-4">
@@ -140,24 +148,34 @@ export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [atBats, setAtBats] = useState<AtBat[]>([]);
   const [games, setGames] = useState<Game[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'avg' | 'hr' | 'rbi'>('avg');
 
   useEffect(() => {
     async function loadData() {
-      const [playersRes, atBatsRes, gamesRes] = await Promise.all([
+      const [playersRes, atBatsRes, gamesRes, sessionsRes] = await Promise.all([
         supabase.from('players').select('*'),
         supabase.from('at_bats').select('*'),
-        supabase.from('games').select('*, game_players(*)'),
+        supabase.from('games').select('*, game_players(*), at_bats(*)'),
+        supabase.from('sessions').select('*').order('date', { ascending: false }).limit(5),
       ]);
 
       setPlayers(playersRes.data || []);
       setAtBats(atBatsRes.data || []);
       setGames(gamesRes.data || []);
+      setSessions(sessionsRes.data || []);
       setLoading(false);
     }
     loadData();
   }, []);
+
+  // Get data for hot streaks
+  const completedGames = games.filter(g => g.status === 'completed');
+  const lastSession = sessions[0] || null;
+  const lastSessionGames = lastSession
+    ? completedGames.filter(g => g.session_id === lastSession.id)
+    : [];
 
   // Calculate stats for each player
   const playerStats = players.map((player) => {
@@ -178,7 +196,22 @@ export default function PlayersPage() {
       g.game_players?.some((gp) => gp.player_id === player.id)
     ).length;
 
-    return { player, avg, hr: homeruns, rbi, games: playerGames };
+    // Calculate hot streaks
+    const recentGamesForPlayer = completedGames
+      .filter(g => g.game_players?.some(gp => gp.player_id === player.id))
+      .slice(0, 3);
+    const lastSessionGamesForPlayer = lastSessionGames.filter(g =>
+      g.game_players?.some(gp => gp.player_id === player.id)
+    );
+
+    const hotStreaks = calculateHotStreaks(
+      player.id,
+      recentGamesForPlayer as any,
+      lastSession,
+      lastSessionGamesForPlayer as any
+    );
+
+    return { player, avg, hr: homeruns, rbi, games: playerGames, hotStreaks };
   });
 
   // Sort players
@@ -252,6 +285,7 @@ export default function PlayersPage() {
               stats={ps}
               rank={i + 1}
               index={i}
+              hotStreaks={ps.hotStreaks}
             />
           ))}
         </div>

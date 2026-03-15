@@ -1,4 +1,4 @@
-import { AtBat, GamePlayerStats } from './types';
+import { AtBat, GamePlayerStats, Game, Season } from './types';
 
 export function calculateStats(
   playerId: string,
@@ -72,4 +72,28 @@ export function formatPercent(pct: number): string {
 export function formatRatio(ratio: number | null): string {
   if (ratio === null) return '-';
   return ratio.toFixed(1);
+}
+
+// Season-based filtering
+export function filterAtBatsBySeason(
+  atBats: AtBat[],
+  games: Game[],
+  seasonId: string
+): AtBat[] {
+  const gameIdsInSeason = new Set(
+    games.filter(g => g.season_id === seasonId).map(g => g.id)
+  );
+  return atBats.filter(ab => gameIdsInSeason.has(ab.game_id));
+}
+
+export function countGamesInSeason(games: Game[], seasonId: string): number {
+  return games.filter(g => g.season_id === seasonId && g.status === 'completed').length;
+}
+
+export function isSeasonLocked(season: Season): boolean {
+  return season.is_locked;
+}
+
+export function getActiveSeason(seasons: Season[]): Season | undefined {
+  return seasons.find(s => s.is_active);
 }

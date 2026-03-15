@@ -21,7 +21,8 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Player, Session, Game, GamePlayer, AtBat } from '@/lib/types';
+import { Player, Session, Game, GamePlayer, AtBat, HotStreak } from '@/lib/types';
+import { calculateHotStreaks, formatHotStreak } from '@/lib/hot-streaks';
 
 // Animation variants
 const fadeUp = {
@@ -122,9 +123,9 @@ function TypeBadge({ type }: { type: string }) {
 }
 
 // Player row component
-function PlayerRow({ player, rank, index, stats }: { player: Player; rank: number; index: number; stats: { avg: number; wins: number; losses: number } }) {
-  const isHot = player.heat === 'hot';
-  const isCold = player.heat === 'cold';
+function PlayerRow({ player, rank, index, stats, hotStreaks }: { player: Player; rank: number; index: number; stats: { avg: number; wins: number; losses: number }; hotStreaks: HotStreak[] }) {
+  const isHot = hotStreaks.length > 0;
+  const topStreak = hotStreaks[0];
 
   return (
     <motion.div
@@ -136,7 +137,7 @@ function PlayerRow({ player, rank, index, stats }: { player: Player; rank: numbe
       style={{
         background: '#0F1829',
         border: `1px solid ${isHot ? 'rgba(240,180,41,0.2)' : 'rgba(255,255,255,0.07)'}`,
-        borderLeft: `3px solid ${isHot ? '#F0B429' : isCold ? '#374151' : 'rgba(255,255,255,0.07)'}`,
+        borderLeft: `3px solid ${isHot ? '#F0B429' : 'rgba(255,255,255,0.07)'}`,
         boxShadow: isHot ? '0 0 12px rgba(240,180,41,0.08)' : 'none',
       }}
     >
@@ -152,13 +153,15 @@ function PlayerRow({ player, rank, index, stats }: { player: Player; rank: numbe
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-sm font-semibold text-[#EFF2FF]">{player.name}</span>
-          <HeatBadge heat={player.heat} streak={player.streak} streakType={player.streak_type} />
-        </div>
-        <span className="text-xs text-[#4A5772]">
-          {stats.wins}W–{stats.losses}L
-        </span>
+        <span className="text-sm font-semibold text-[#EFF2FF]">{player.name}</span>
+        {topStreak && (
+          <div className="flex items-center gap-1 mt-0.5">
+            <Zap size={10} color="#F0B429" fill="#F0B429" />
+            <span className="text-xs font-semibold text-[#F0B429]">
+              {formatHotStreak(topStreak)}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="text-right">
@@ -287,7 +290,7 @@ const NAV_ITEMS = [
   { icon: BookOpen, label: 'Sessions', href: '/sessions', active: false },
   { icon: BarChart2, label: 'Stats', href: '/stats', active: false },
   { icon: ArrowLeftRight, label: 'Head-to-Head', href: '/h2h', active: false },
-  { icon: Trophy, label: 'Achievements', href: '/awards', active: false },
+  { icon: Trophy, label: 'Awards', href: '/awards', active: false },
 ];
 
 // Sidebar
@@ -424,7 +427,7 @@ export default function Dashboard() {
       const [playersRes, sessionsRes, gamesRes] = await Promise.all([
         supabase.from('players').select('*'),
         supabase.from('sessions').select('*').order('date', { ascending: false }).limit(5),
-        supabase.from('games').select('*').order('created_at', { ascending: false }).limit(500),
+        supabase.from('games').select('*, game_players(*), at_bats(*)').order('created_at', { ascending: false }).limit(500),
       ]);
 
       // Fetch all at-bats (may be more than 1000)
@@ -451,6 +454,13 @@ export default function Dashboard() {
     loadData();
   }, []);
 
+  // Get recent games for hot streaks (last 3 completed games per player)
+  const completedGames = games.filter(g => g.status === 'completed');
+  const lastSession = sessions[0] || null;
+  const lastSessionGames = lastSession
+    ? completedGames.filter(g => g.session_id === lastSession.id)
+    : [];
+
   // Calculate stats for each player
   const playerStats = players.map((player) => {
     const playerAtBats = atBats.filter((ab) => ab.player_id === player.id);
@@ -473,7 +483,22 @@ export default function Dashboard() {
     const wins = playerGames.filter(g => g.score?.includes('W')).length;
     const losses = playerGames.filter(g => g.score?.includes('L')).length;
 
-    return { player, avg, hits, homeruns, rbi, wins, losses };
+    // Calculate hot streaks
+    const recentGamesForPlayer = completedGames
+      .filter(g => g.game_players?.some(gp => gp.player_id === player.id))
+      .slice(0, 3);
+    const lastSessionGamesForPlayer = lastSessionGames.filter(g =>
+      g.game_players?.some(gp => gp.player_id === player.id)
+    );
+
+    const hotStreaks = calculateHotStreaks(
+      player.id,
+      recentGamesForPlayer as any,
+      lastSession,
+      lastSessionGamesForPlayer as any
+    );
+
+    return { player, avg, hits, homeruns, rbi, wins, losses, hotStreaks };
   });
 
   // Sort by avg for leaderboard
@@ -630,7 +655,7 @@ export default function Dashboard() {
           <div className="w-[260px] flex-shrink-0">
             <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 flex items-center gap-1.5">
               <Zap size={11} color="#F0B429" />
-              Hot / Cold
+              Hot
             </div>
             <div className="flex flex-col gap-2">
               {sortedByAvg.map((ps, i) => (
@@ -640,15 +665,10 @@ export default function Dashboard() {
                   rank={i + 1}
                   index={i}
                   stats={{ avg: ps.avg, wins: ps.wins, losses: ps.losses }}
+                  hotStreaks={ps.hotStreaks}
                 />
               ))}
             </div>
-            <Link href="/h2h">
-              <motion.div whileHover={{ x: 2 }} className="flex items-center gap-1.5 mt-3 text-[13px] text-[#60A5FA] font-medium">
-                <ArrowLeftRight size={13} />
-                Head-to-Head
-              </motion.div>
-            </Link>
           </div>
         </div>
       </div>

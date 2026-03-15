@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, BarChart2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, BarChart2, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import Link from 'next/link';
 // Note: Link is still used for the back button
 import { supabase } from '@/lib/supabase';
-import { Player, AtBat, Game, Session } from '@/lib/types';
+import { Player, AtBat, Game, Session, Season } from '@/lib/types';
+import { filterAtBatsBySeason, countGamesInSeason } from '@/lib/stats';
 
 type SortKey = 'name' | 'games' | 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'h' | 'doubles' | 'triples' | 'ab' | 'bb' | 'kPercent';
 
@@ -93,17 +94,19 @@ export default function StatsPage() {
   const [atBats, setAtBats] = useState<AtBat[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('avg');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  const [activeSection, setActiveSection] = useState<'2025' | 'career'>('2025');
+  const [activeSection, setActiveSection] = useState<'2026' | '2025' | 'career'>('2026');
 
   useEffect(() => {
     async function loadData() {
-      const [playersRes, gamesRes, sessionsRes] = await Promise.all([
+      const [playersRes, gamesRes, sessionsRes, seasonsRes] = await Promise.all([
         supabase.from('players').select('*'),
         supabase.from('games').select('*, game_players(*)').limit(1000),
         supabase.from('sessions').select('*'),
+        supabase.from('seasons').select('*').order('year', { ascending: false }),
       ]);
 
       // Fetch all at-bats (may be more than 1000)
@@ -125,16 +128,30 @@ export default function StatsPage() {
       setAtBats(allAtBats);
       setGames(gamesRes.data || []);
       setSessions(sessionsRes.data || []);
+      setSeasons(seasonsRes.data || []);
       setLoading(false);
     }
     loadData();
   }, []);
 
-  // Calculate stats - 2025 season and career are the same until a new season starts
-  // All games are part of the 2025 season for now
+  // Calculate stats filtered by season
   const getFilteredStats = () => {
-    // Both 2025 and career show all stats until user indicates a new season
-    return players.map((player) => calculatePlayerStats(player, atBats, games));
+    if (activeSection === 'career') {
+      // Career = all games
+      return players.map((player) => calculatePlayerStats(player, atBats, games));
+    }
+
+    // Find the season
+    const season = seasons.find(s => s.year.toString() === activeSection);
+    if (!season) {
+      return players.map((player) => calculatePlayerStats(player, [], []));
+    }
+
+    // Filter games and at-bats by season
+    const seasonGames = games.filter(g => g.season_id === season.id);
+    const seasonAtBats = filterAtBatsBySeason(atBats, games, season.id);
+
+    return players.map((player) => calculatePlayerStats(player, seasonAtBats, seasonGames));
   };
 
   const playerStats = getFilteredStats();
@@ -216,14 +233,26 @@ export default function StatsPage() {
         <div className="flex gap-2 mb-5">
           <motion.button
             whileTap={{ scale: 0.97 }}
-            onClick={() => setActiveSection('2025')}
+            onClick={() => setActiveSection('2026')}
             className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+            style={{
+              background: activeSection === '2026' ? '#60A5FA' : '#162035',
+              color: activeSection === '2026' ? '#080D18' : '#8A9BBB',
+            }}
+          >
+            2026 Season
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setActiveSection('2025')}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5"
             style={{
               background: activeSection === '2025' ? '#60A5FA' : '#162035',
               color: activeSection === '2025' ? '#080D18' : '#8A9BBB',
             }}
           >
             2025 Season
+            <Lock size={12} />
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.97 }}
@@ -234,7 +263,7 @@ export default function StatsPage() {
               color: activeSection === 'career' ? '#080D18' : '#8A9BBB',
             }}
           >
-            Career Stats
+            Career
           </motion.button>
         </div>
 
@@ -326,7 +355,7 @@ export default function StatsPage() {
             style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
           >
             <BarChart2 size={32} color="#4A5772" className="mx-auto mb-3" />
-            <div className="text-[#4A5772] text-sm">No stats for {activeSection === '2025' ? '2025 Season' : 'Career'}</div>
+            <div className="text-[#4A5772] text-sm">No stats for {activeSection === 'career' ? 'Career' : `${activeSection} Season`}</div>
             <div className="text-xs text-[#4A5772] mt-1">Start logging games to see statistics!</div>
           </div>
         )}

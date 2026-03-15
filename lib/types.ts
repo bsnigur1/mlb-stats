@@ -15,6 +15,24 @@ export type GameResult = 'W' | 'L';
 export type GameMode = '2v2' | '3v3' | '1v1';
 export type AwardType = 'MVP_GAME' | 'MVP_SESSION' | 'MVP_WEEK' | 'SEASON_HIGH' | 'HOT_STREAK';
 
+export interface Season {
+  id: string;
+  year: number;
+  name: string;
+  start_date: string;
+  end_date: string | null;
+  is_active: boolean;
+  is_locked: boolean;
+  created_at: string;
+}
+
+export interface HotStreak {
+  type: 'hr' | 'avg' | 'rbi' | 'hitting_streak' | 'multi_hit';
+  value: string;
+  label: string;
+  timeframe: string;
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -41,6 +59,7 @@ export interface Session {
 export interface Game {
   id: string;
   session_id: string | null;
+  season_id: string | null;
   date: string;
   status: 'in_progress' | 'completed';
   current_inning: number;

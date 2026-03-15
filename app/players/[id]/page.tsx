@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Player, Game, AtBat, Award } from '@/lib/types';
+import { Player, Game, AtBat, Award, Session, HotStreak } from '@/lib/types';
+import { calculateHotStreaks, formatHotStreak } from '@/lib/hot-streaks';
 
 // Animation variants
 const fadeUp = {
@@ -155,20 +156,23 @@ export default function PlayerProfile({ params }: { params: Promise<{ id: string
   const [atBats, setAtBats] = useState<AtBat[]>([]);
   const [awards, setAwards] = useState<Award[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [hotStreaks, setHotStreaks] = useState<HotStreak[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
-      const [playerRes, gamesRes, atBatsRes, awardsRes, playersRes] = await Promise.all([
+      const [playerRes, gamesRes, atBatsRes, awardsRes, playersRes, sessionsRes] = await Promise.all([
         supabase.from('players').select('*').eq('id', id).single(),
         supabase
           .from('games')
-          .select('*, game_players!inner(*)')
+          .select('*, game_players!inner(*), at_bats(*)')
           .eq('game_players.player_id', id)
           .order('created_at', { ascending: false }),
         supabase.from('at_bats').select('*').eq('player_id', id),
         supabase.from('awards').select('*').eq('player_id', id).order('date', { ascending: false }),
         supabase.from('players').select('*'),
+        supabase.from('sessions').select('*').order('date', { ascending: false }).limit(5),
       ]);
 
       setPlayer(playerRes.data);
@@ -176,6 +180,23 @@ export default function PlayerProfile({ params }: { params: Promise<{ id: string
       setAtBats(atBatsRes.data || []);
       setAwards(awardsRes.data || []);
       setAllPlayers(playersRes.data || []);
+      setSessions(sessionsRes.data || []);
+
+      // Calculate hot streaks
+      const completedGames = (gamesRes.data || []).filter((g: Game) => g.status === 'completed');
+      const lastSession = sessionsRes.data?.[0] || null;
+      const lastSessionGames = lastSession
+        ? completedGames.filter((g: Game) => g.session_id === lastSession.id)
+        : [];
+
+      const streaks = calculateHotStreaks(
+        id,
+        completedGames.slice(0, 3) as any,
+        lastSession,
+        lastSessionGames as any
+      );
+      setHotStreaks(streaks);
+
       setLoading(false);
     }
     loadData();
@@ -273,7 +294,19 @@ export default function PlayerProfile({ params }: { params: Promise<{ id: string
           <h1 className="font-display font-bold text-lg text-[#EFF2FF]">{player.name.toUpperCase()}</h1>
           {player.handle && <div className="text-xs text-[#4A5772]">{player.handle}</div>}
         </div>
-        <HeatBadge heat={player.heat} streak={player.streak} streakType={player.streak_type} />
+        {hotStreaks.length > 0 && (
+          <span
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wide"
+            style={{
+              background: 'rgba(240,180,41,0.12)',
+              color: '#F0B429',
+              border: '1px solid rgba(240,180,41,0.25)',
+            }}
+          >
+            <Zap size={12} fill="#F0B429" />
+            {formatHotStreak(hotStreaks[0])}
+          </span>
+        )}
       </div>
 
       <div className="max-w-2xl mx-auto p-5 space-y-6">

@@ -17,7 +17,7 @@ import {
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Player, GameMode } from '@/lib/types';
+import { Player, GameMode, Season } from '@/lib/types';
 
 // Animation variants
 const fadeUp = {
@@ -61,6 +61,7 @@ function StartGameContent() {
   const initialMode = (searchParams.get('mode') as GameMode) || '2v2';
 
   const [players, setPlayers] = useState<Player[]>([]);
+  const [activeSeason, setActiveSeason] = useState<Season | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
 
@@ -77,8 +78,12 @@ function StartGameContent() {
 
   useEffect(() => {
     async function loadData() {
-      const { data: playerData } = await supabase.from('players').select('*');
-      setPlayers(playerData || []);
+      const [playersRes, seasonsRes] = await Promise.all([
+        supabase.from('players').select('*'),
+        supabase.from('seasons').select('*').eq('is_active', true).single(),
+      ]);
+      setPlayers(playersRes.data || []);
+      setActiveSeason(seasonsRes.data || null);
       setLoading(false);
     }
     loadData();
@@ -119,6 +124,7 @@ function StartGameContent() {
         .from('games')
         .insert({
           session_id: null,
+          season_id: activeSeason?.id || null,
           date: today,
           status: 'in_progress',
           current_inning: 1,
@@ -133,10 +139,10 @@ function StartGameContent() {
 
       if (!game) throw new Error('Failed to create game');
 
-      // Add game players with batting order
+      // Add game players with batting order (deduplicate to prevent duplicate stats)
       const playerIdsToAdd = gameMode === '1v1' && h2hOpponent
         ? [currentPlayerId, h2hOpponent]
-        : battingOrder.filter(id => selectedPlayers.includes(id));
+        : [...new Set(battingOrder)].filter(id => selectedPlayers.includes(id));
 
       const gamePlayers = playerIdsToAdd.map((playerId, idx) => ({
         game_id: game.id,
