@@ -18,27 +18,29 @@ const fadeUp = {
   }),
 };
 
-const AT_BAT_BUTTONS: { result: AtBatResult; label: string; color: string; needsRbi: boolean }[] = [
+const AT_BAT_BUTTONS: { result: AtBatResult; label: string; color: string; needsRbi: boolean; outsRecorded?: number }[] = [
   { result: 'single', label: 'Single', color: '#22C55E', needsRbi: true },
   { result: 'double', label: 'Double', color: '#3B82F6', needsRbi: true },
   { result: 'triple', label: 'Triple', color: '#A855F7', needsRbi: true },
   { result: 'homerun', label: 'Homerun', color: '#F97316', needsRbi: true },
   { result: 'strikeout', label: 'Strikeout', color: '#EF4444', needsRbi: false },
-  { result: 'out', label: 'In Play Out', color: '#6B7280', needsRbi: true },
+  { result: 'out', label: 'In Play Out', color: '#6B7280', needsRbi: true, outsRecorded: 1 },
+  { result: 'double_play', label: 'Double Play', color: '#6B7280', needsRbi: true, outsRecorded: 2 },
   { result: 'error', label: 'Reached on Error', color: '#8B5CF6', needsRbi: true },
   { result: 'walk', label: 'Walk', color: '#F0B429', needsRbi: false },
 ];
 
 // Pitching event types
-type PitchingResult = 'k' | 'bb' | 'single' | 'double' | 'triple' | 'hr' | 'out';
-const PITCHING_BUTTONS: { result: PitchingResult; label: string; color: string; isOut: boolean; bases: number }[] = [
-  { result: 'k', label: 'Strikeout', color: '#22C55E', isOut: true, bases: 0 },
-  { result: 'out', label: 'Out (In Play)', color: '#6B7280', isOut: true, bases: 0 },
-  { result: 'bb', label: 'Walk', color: '#F0B429', isOut: false, bases: 1 },
-  { result: 'single', label: 'Single', color: '#EF4444', isOut: false, bases: 1 },
-  { result: 'double', label: 'Double', color: '#EF4444', isOut: false, bases: 2 },
-  { result: 'triple', label: 'Triple', color: '#EF4444', isOut: false, bases: 3 },
-  { result: 'hr', label: 'Home Run', color: '#F97316', isOut: false, bases: 4 },
+type PitchingResult = 'k' | 'bb' | 'single' | 'double' | 'triple' | 'hr' | 'out' | 'dp';
+const PITCHING_BUTTONS: { result: PitchingResult; label: string; color: string; isOut: boolean; outsRecorded: number; bases: number }[] = [
+  { result: 'k', label: 'Strikeout', color: '#22C55E', isOut: true, outsRecorded: 1, bases: 0 },
+  { result: 'out', label: 'Out (In Play)', color: '#6B7280', isOut: true, outsRecorded: 1, bases: 0 },
+  { result: 'dp', label: 'Double Play', color: '#6B7280', isOut: true, outsRecorded: 2, bases: 0 },
+  { result: 'bb', label: 'Walk', color: '#F0B429', isOut: false, outsRecorded: 0, bases: 1 },
+  { result: 'single', label: 'Single', color: '#EF4444', isOut: false, outsRecorded: 0, bases: 1 },
+  { result: 'double', label: 'Double', color: '#EF4444', isOut: false, outsRecorded: 0, bases: 2 },
+  { result: 'triple', label: 'Triple', color: '#EF4444', isOut: false, outsRecorded: 0, bases: 3 },
+  { result: 'hr', label: 'Home Run', color: '#F97316', isOut: false, outsRecorded: 0, bases: 4 },
 ];
 
 // Diamond component for showing baserunners - now interactive
@@ -136,6 +138,19 @@ export default function GamePage() {
   const [manualRunners, setManualRunners] = useState<{ first: boolean; second: boolean; third: boolean }>({ first: false, second: false, third: false });
   // Runner action popup (for caught stealing, advancing, etc.)
   const [editingRunner, setEditingRunner] = useState<1 | 2 | 3 | null>(null);
+  // Pitching event history for undo
+  type PitchingEvent = {
+    result: PitchingResult;
+    pitcherId: string;
+    outsRecorded: number;
+    runsScored: number;
+    runsByPitcher: Record<string, number>;
+    prevBaserunners: Baserunner[];
+    prevOuts: number;
+    prevInning: number;
+    statsChanges: { k: number; bb: number; h: number };
+  };
+  const [pitchingHistory, setPitchingHistory] = useState<PitchingEvent[]>([]);
 
   // Helper to calculate current batter for 1v1 based on total outs
   const calculateH2HBatterIndex = useCallback((atBatsData: AtBat[], numPlayers: number) => {
@@ -230,6 +245,7 @@ export default function GamePage() {
     if (!pendingResult || !game) return;
 
     const currentPlayer = gamePlayers[currentBatterIndex];
+    const buttonInfo = AT_BAT_BUTTONS.find(b => b.result === pendingResult);
 
     // Record the at-bat
     const { data: newAtBat } = await supabase
@@ -248,15 +264,16 @@ export default function GamePage() {
       const updatedAtBats = [...atBats, newAtBat];
       setAtBats(updatedAtBats);
 
-      // Check if this was an out
-      const isOut = pendingResult === 'out' || pendingResult === 'strikeout';
+      // Check if this was an out (including double play)
+      const isOut = pendingResult === 'out' || pendingResult === 'strikeout' || pendingResult === 'double_play';
+      const outsRecorded = buttonInfo?.outsRecorded || (isOut ? 1 : 0);
       let newOuts = game.current_outs;
       let newInning = game.current_inning;
 
       if (isOut) {
-        newOuts++;
+        newOuts += outsRecorded;
         if (newOuts >= 3) {
-          newOuts = 0;
+          newOuts = newOuts % 3; // Handle overflow for double play at 2 outs
           newInning++;
         }
       }
@@ -473,8 +490,14 @@ export default function GamePage() {
 
     const buttonInfo = PITCHING_BUTTONS.find(b => b.result === pendingPitchingResult);
     const isOut = buttonInfo?.isOut || false;
+    const outsToRecord = buttonInfo?.outsRecorded || 0;
     const isHit = ['single', 'double', 'triple', 'hr'].includes(pendingPitchingResult);
     const isWalk = pendingPitchingResult === 'bb';
+
+    // Save state for undo
+    const prevBaserunners = [...baserunners];
+    const prevOuts = game.current_outs;
+    const prevInning = game.current_inning;
 
     let newOuts = game.current_outs;
     let newInning = game.current_inning;
@@ -562,12 +585,36 @@ export default function GamePage() {
         ];
       }
     } else if (isOut) {
-      newOuts++;
+      // Handle outs (including double play)
+      newOuts += outsToRecord;
+
+      // Use manual runner positions if there were runners
+      if (baserunners.length > 0) {
+        newBaserunners = [];
+        if (manualRunners.first) {
+          // Keep closest runner to first
+          const runnerFrom1st = baserunners.find(r => r.base === 1);
+          newBaserunners.push({ base: 1, pitcher_id: runnerFrom1st?.pitcher_id || currentPitcherId });
+        }
+        if (manualRunners.second) {
+          const runnerFrom2nd = baserunners.find(r => r.base === 2);
+          const runnerFrom1st = baserunners.find(r => r.base === 1);
+          newBaserunners.push({ base: 2, pitcher_id: runnerFrom2nd?.pitcher_id || runnerFrom1st?.pitcher_id || currentPitcherId });
+        }
+        if (manualRunners.third) {
+          const runnerFrom3rd = baserunners.find(r => r.base === 3);
+          const runnerFrom2nd = baserunners.find(r => r.base === 2);
+          newBaserunners.push({ base: 3, pitcher_id: runnerFrom3rd?.pitcher_id || runnerFrom2nd?.pitcher_id || currentPitcherId });
+        }
+      }
+
+      // Check for inning end
       if (newOuts >= 3) {
         newOuts = 0;
         newInning++;
         newBaserunners = [];
       }
+
       // Attribute runs to the pitchers who put runners on
       if (totalRuns > 0) {
         const sortedRunners = [...baserunners].sort((a, b) => b.base - a.base);
@@ -609,11 +656,17 @@ export default function GamePage() {
       .eq('player_id', currentPitcherId)
       .single();
 
+    const statsChanges = {
+      k: pendingPitchingResult === 'k' ? 1 : 0,
+      bb: isWalk ? 1 : 0,
+      h: isHit ? 1 : 0,
+    };
+
     const statsUpdate = {
-      outs_recorded: (currentStats?.outs_recorded || 0) + (isOut ? 1 : 0),
-      strikeouts: (currentStats?.strikeouts || 0) + (pendingPitchingResult === 'k' ? 1 : 0),
-      walks: (currentStats?.walks || 0) + (isWalk ? 1 : 0),
-      hits_allowed: (currentStats?.hits_allowed || 0) + (isHit ? 1 : 0),
+      outs_recorded: (currentStats?.outs_recorded || 0) + outsToRecord,
+      strikeouts: (currentStats?.strikeouts || 0) + statsChanges.k,
+      walks: (currentStats?.walks || 0) + statsChanges.bb,
+      hits_allowed: (currentStats?.hits_allowed || 0) + statsChanges.h,
     };
 
     if (currentStats) {
@@ -626,6 +679,19 @@ export default function GamePage() {
         earned_runs: runsByPitcher[currentPitcherId] || 0,
       });
     }
+
+    // Save to history for undo
+    setPitchingHistory(prev => [...prev, {
+      result: pendingPitchingResult,
+      pitcherId: currentPitcherId,
+      outsRecorded: outsToRecord,
+      runsScored: totalRuns,
+      runsByPitcher,
+      prevBaserunners,
+      prevOuts,
+      prevInning,
+      statsChanges,
+    }]);
 
     // Update game state
     await supabase
@@ -644,10 +710,10 @@ export default function GamePage() {
       newPitchingStats[currentPitcherId] = { outs: 0, k: 0, bb: 0, h: 0, er: 0 };
     }
     newPitchingStats[currentPitcherId] = {
-      outs: newPitchingStats[currentPitcherId].outs + (isOut ? 1 : 0),
-      k: newPitchingStats[currentPitcherId].k + (pendingPitchingResult === 'k' ? 1 : 0),
-      bb: newPitchingStats[currentPitcherId].bb + (isWalk ? 1 : 0),
-      h: newPitchingStats[currentPitcherId].h + (isHit ? 1 : 0),
+      outs: newPitchingStats[currentPitcherId].outs + outsToRecord,
+      k: newPitchingStats[currentPitcherId].k + statsChanges.k,
+      bb: newPitchingStats[currentPitcherId].bb + statsChanges.bb,
+      h: newPitchingStats[currentPitcherId].h + statsChanges.h,
       er: newPitchingStats[currentPitcherId].er + (runsByPitcher[currentPitcherId] || 0),
     };
 
@@ -696,6 +762,82 @@ export default function GamePage() {
       .eq('id', gameId);
 
     loadGame();
+  };
+
+  const undoLastPitchingEvent = async () => {
+    if (pitchingHistory.length === 0 || !game) return;
+
+    const lastEvent = pitchingHistory[pitchingHistory.length - 1];
+
+    // Restore game state
+    await supabase
+      .from('games')
+      .update({
+        current_outs: lastEvent.prevOuts,
+        current_inning: lastEvent.prevInning,
+      })
+      .eq('id', gameId);
+
+    // Restore pitcher stats
+    const { data: currentStats } = await supabase
+      .from('pitching_stats')
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('player_id', lastEvent.pitcherId)
+      .single();
+
+    if (currentStats) {
+      await supabase.from('pitching_stats').update({
+        outs_recorded: Math.max(0, currentStats.outs_recorded - lastEvent.outsRecorded),
+        strikeouts: Math.max(0, currentStats.strikeouts - lastEvent.statsChanges.k),
+        walks: Math.max(0, currentStats.walks - lastEvent.statsChanges.bb),
+        hits_allowed: Math.max(0, currentStats.hits_allowed - lastEvent.statsChanges.h),
+        earned_runs: Math.max(0, currentStats.earned_runs - (lastEvent.runsByPitcher[lastEvent.pitcherId] || 0)),
+      }).eq('id', currentStats.id);
+    }
+
+    // Restore earned runs for other pitchers
+    for (const [pitcherId, runs] of Object.entries(lastEvent.runsByPitcher)) {
+      if (pitcherId !== lastEvent.pitcherId) {
+        const { data: pitcherStats } = await supabase
+          .from('pitching_stats')
+          .select('*')
+          .eq('game_id', gameId)
+          .eq('player_id', pitcherId)
+          .single();
+
+        if (pitcherStats) {
+          await supabase.from('pitching_stats').update({
+            earned_runs: Math.max(0, pitcherStats.earned_runs - runs),
+          }).eq('id', pitcherStats.id);
+        }
+      }
+    }
+
+    // Update local state
+    setGame({ ...game, current_outs: lastEvent.prevOuts, current_inning: lastEvent.prevInning });
+    setBaserunners(lastEvent.prevBaserunners);
+
+    // Update local pitching stats
+    const newPitchingStats = { ...pitchingStats };
+    if (newPitchingStats[lastEvent.pitcherId]) {
+      newPitchingStats[lastEvent.pitcherId] = {
+        outs: Math.max(0, newPitchingStats[lastEvent.pitcherId].outs - lastEvent.outsRecorded),
+        k: Math.max(0, newPitchingStats[lastEvent.pitcherId].k - lastEvent.statsChanges.k),
+        bb: Math.max(0, newPitchingStats[lastEvent.pitcherId].bb - lastEvent.statsChanges.bb),
+        h: Math.max(0, newPitchingStats[lastEvent.pitcherId].h - lastEvent.statsChanges.h),
+        er: Math.max(0, newPitchingStats[lastEvent.pitcherId].er - (lastEvent.runsByPitcher[lastEvent.pitcherId] || 0)),
+      };
+    }
+    for (const [pitcherId, runs] of Object.entries(lastEvent.runsByPitcher)) {
+      if (pitcherId !== lastEvent.pitcherId && newPitchingStats[pitcherId]) {
+        newPitchingStats[pitcherId].er = Math.max(0, newPitchingStats[pitcherId].er - runs);
+      }
+    }
+    setPitchingStats(newPitchingStats);
+
+    // Remove from history
+    setPitchingHistory(prev => prev.slice(0, -1));
   };
 
   const endGame = async () => {
@@ -1167,7 +1309,7 @@ export default function GamePage() {
               className="space-y-3"
             >
               {/* Outs row */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 {PITCHING_BUTTONS.filter(b => b.isOut).map(({ result, label, color }) => (
                   <motion.button
                     key={result}
@@ -1177,9 +1319,22 @@ export default function GamePage() {
                         alert('Select a pitcher first');
                         return;
                       }
-                      setPendingPitchingResult(result);
+                      // If no runners, record immediately (except DP which needs runners)
+                      if (baserunners.length === 0 && result !== 'dp') {
+                        setManualRunners({ first: false, second: false, third: false });
+                        setRunsInput(0);
+                        setPendingPitchingResult(result);
+                      } else if (result === 'dp' && baserunners.length === 0) {
+                        alert('Double play requires runners on base');
+                        return;
+                      } else {
+                        // Has runners - need to confirm runner positions
+                        setManualRunners({ first: false, second: false, third: false });
+                        setRunsInput(0);
+                        setPendingPitchingResult(result);
+                      }
                     }}
-                    className="py-4 rounded-xl font-bold text-base transition-all"
+                    className="py-4 rounded-xl font-bold text-sm transition-all"
                     style={{
                       background: `${color}20`,
                       border: `1px solid ${color}50`,
@@ -1329,12 +1484,13 @@ export default function GamePage() {
                   </>
                 )}
 
-                {/* For outs: ask if any runs scored */}
+                {/* For outs with runners: ask runs scored AND where runners are now */}
                 {PITCHING_BUTTONS.find(b => b.result === pendingPitchingResult)?.isOut && baserunners.length > 0 && (
                   <>
+                    {/* Runs scored */}
                     <div className="text-sm text-[#EFF2FF] font-medium mb-2">Runs scored on the play?</div>
-                    <div className="flex justify-center gap-2">
-                      {[0, 1, 2, 3].map((num) => (
+                    <div className="flex justify-center gap-2 mb-4">
+                      {[0, 1, 2, 3].slice(0, baserunners.length + 1).map((num) => (
                         <motion.button
                           key={num}
                           whileTap={{ scale: 0.95 }}
@@ -1347,6 +1503,30 @@ export default function GamePage() {
                           }}
                         >
                           {num}
+                        </motion.button>
+                      ))}
+                    </div>
+
+                    {/* Baserunner positions after the play */}
+                    <div className="text-sm text-[#EFF2FF] font-medium mb-2">Who&apos;s on base now?</div>
+                    <div className="flex justify-center gap-3">
+                      {[
+                        { key: 'first', label: '1B' },
+                        { key: 'second', label: '2B' },
+                        { key: 'third', label: '3B' },
+                      ].map(({ key, label }) => (
+                        <motion.button
+                          key={key}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setManualRunners(prev => ({ ...prev, [key]: !prev[key as keyof typeof prev] }))}
+                          className="w-14 h-14 rounded-lg font-bold text-sm transition-all"
+                          style={{
+                            background: manualRunners[key as keyof typeof manualRunners] ? '#F0B429' : '#162035',
+                            color: manualRunners[key as keyof typeof manualRunners] ? '#080D18' : '#8A9BBB',
+                            border: `1px solid ${manualRunners[key as keyof typeof manualRunners] ? '#F0B429' : 'rgba(255,255,255,0.1)'}`,
+                          }}
+                        >
+                          {label}
                         </motion.button>
                       ))}
                     </div>
@@ -1622,8 +1802,8 @@ export default function GamePage() {
         >
           <motion.button
             whileTap={{ scale: 0.97 }}
-            onClick={undoLastAtBat}
-            disabled={atBats.length === 0}
+            onClick={isPitchingMode && game.track_pitching ? undoLastPitchingEvent : undoLastAtBat}
+            disabled={isPitchingMode && game.track_pitching ? pitchingHistory.length === 0 : atBats.length === 0}
             className="flex-1 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
             style={{ background: '#162035', color: '#8A9BBB', border: '1px solid rgba(255,255,255,0.1)' }}
           >

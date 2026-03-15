@@ -15,7 +15,7 @@ export function calculateStats(
   const walks = playerAtBats.filter((ab) => ab.result === 'walk').length;
   const strikeouts = playerAtBats.filter((ab) => ab.result === 'strikeout').length;
   const errors = playerAtBats.filter((ab) => ab.result === 'error').length;
-  const outs = playerAtBats.filter((ab) => ab.result === 'out').length;
+  const outs = playerAtBats.filter((ab) => ab.result === 'out' || ab.result === 'double_play').length;
 
   const hits = singles + doubles + triples + homeruns;
 

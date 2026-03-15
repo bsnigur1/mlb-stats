@@ -2,6 +2,7 @@
 
 export type AtBatResult =
   | 'out'
+  | 'double_play'
   | 'strikeout'
   | 'walk'
   | 'single'
