@@ -491,12 +491,20 @@ export default function Dashboard() {
     const losses = playerGames.filter(g => g.score?.includes('L')).length;
 
     // Calculate hot streaks (uses all recent games for hot streaks, not just 2026)
+    // Attach at_bats from the separately loaded array to ensure they're populated
     const recentGamesForPlayer = completedGames
       .filter(g => g.game_players?.some(gp => gp.player_id === player.id))
-      .slice(0, 3);
-    const lastSessionGamesForPlayer = lastSessionGames.filter(g =>
-      g.game_players?.some(gp => gp.player_id === player.id)
-    );
+      .slice(0, 3)
+      .map(g => ({
+        ...g,
+        at_bats: atBats.filter(ab => ab.game_id === g.id),
+      }));
+    const lastSessionGamesForPlayer = lastSessionGames
+      .filter(g => g.game_players?.some(gp => gp.player_id === player.id))
+      .map(g => ({
+        ...g,
+        at_bats: atBats.filter(ab => ab.game_id === g.id),
+      }));
 
     const hotStreaks = calculateHotStreaks(
       player.id,
