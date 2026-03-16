@@ -24,7 +24,7 @@ const MEMORABLE_MOMENTS = [
     title: 'Back-to-Back-to-Back-to-Back-to-Back HRs',
     player: 'Bryan & Greg',
     description: '5 consecutive homers',
-    detail: '5 HRs in a row',
+    detail: '',
     date: 'March 15, 2026',
     icon: Zap,
     color: '#F0B429',
@@ -38,6 +38,16 @@ const MEMORABLE_MOMENTS = [
     date: 'March 15, 2026',
     icon: Target,
     color: '#EF4444',
+  },
+  {
+    id: '526-ft-hr',
+    title: '526 Foot Homerun',
+    player: 'Bryan',
+    description: 'Using Stanton',
+    detail: 'Longest HR',
+    date: 'March 6, 2026',
+    icon: Zap,
+    color: '#F97316',
   },
   {
     id: 'perfect-game',
@@ -110,8 +120,12 @@ function MomentCard({
 
           <div className="flex items-center gap-3 text-sm">
             <span className="text-[#8A9BBB]">{moment.description}</span>
-            <span className="text-[#4A5772]">·</span>
-            <span className="text-[#F0B429] font-semibold">{moment.detail}</span>
+            {moment.detail && (
+              <>
+                <span className="text-[#4A5772]">·</span>
+                <span className="text-[#F0B429] font-semibold">{moment.detail}</span>
+              </>
+            )}
           </div>
 
           <div className="text-xs text-[#4A5772] mt-2">{moment.date}</div>
