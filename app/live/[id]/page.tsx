@@ -31,6 +31,7 @@ const AT_BAT_LABELS: Record<string, { label: string; color: string }> = {
   homerun: { label: 'Homerun', color: '#F97316' },
   strikeout: { label: 'Strikeout', color: '#EF4444' },
   out: { label: 'In Play Out', color: '#6B7280' },
+  double_play: { label: 'Double Play', color: '#6B7280' },
   error: { label: 'Reached on Error', color: '#8B5CF6' },
   walk: { label: 'Walk', color: '#F0B429' },
 };
