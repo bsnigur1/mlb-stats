@@ -513,17 +513,27 @@ export default function Dashboard() {
       lastSessionGamesForPlayer as any
     );
 
-    return { player, avg, hits, homeruns, rbi, wins, losses, hotStreaks };
+    // Calculate AB per HR and AB per RBI (lower is better)
+    const abPerHr = homeruns > 0 ? ab / homeruns : null;
+    const abPerRbi = rbi > 0 ? ab / rbi : null;
+
+    return { player, avg, hits, homeruns, rbi, ab, abPerHr, abPerRbi, wins, losses, hotStreaks };
   });
 
   // Sort by avg for leaderboard
   const sortedByAvg = [...playerStats].sort((a, b) => b.avg - a.avg);
-  const sortedByHr = [...playerStats].sort((a, b) => b.homeruns - a.homeruns);
-  const sortedByRbi = [...playerStats].sort((a, b) => b.rbi - a.rbi);
+  // Sort by AB per HR (lower is better, null values go to end)
+  const sortedByAbPerHr = [...playerStats]
+    .filter(p => p.abPerHr !== null)
+    .sort((a, b) => (a.abPerHr as number) - (b.abPerHr as number));
+  // Sort by AB per RBI (lower is better, null values go to end)
+  const sortedByAbPerRbi = [...playerStats]
+    .filter(p => p.abPerRbi !== null)
+    .sort((a, b) => (a.abPerRbi as number) - (b.abPerRbi as number));
 
   const leader = sortedByAvg[0];
-  const hrLeader = sortedByHr[0];
-  const rbiLeader = sortedByRbi[0];
+  const hrLeader = sortedByAbPerHr[0];
+  const rbiLeader = sortedByAbPerRbi[0];
 
   if (loading) {
     return (
@@ -625,15 +635,15 @@ export default function Dashboard() {
                 index={0}
               />
               <LeaderCard
-                label="Home Runs"
+                label="AB per HR"
                 player={hrLeader?.player.name || '-'}
-                value={String(hrLeader?.homeruns || 0)}
+                value={hrLeader?.abPerHr ? hrLeader.abPerHr.toFixed(1) : '-'}
                 index={1}
               />
               <LeaderCard
-                label="RBIs"
+                label="AB per RBI"
                 player={rbiLeader?.player.name || '-'}
-                value={String(rbiLeader?.rbi || 0)}
+                value={rbiLeader?.abPerRbi ? rbiLeader.abPerRbi.toFixed(1) : '-'}
                 index={2}
               />
             </div>
@@ -709,8 +719,8 @@ export default function Dashboard() {
                   </div>
                   <span className="text-sm font-semibold text-[#EFF2FF]">Bryan</span>
                 </div>
-                <div className="text-sm text-[#F0B429] font-bold">443 Foot Homerun</div>
-                <div className="text-xs text-[#4A5772] mt-0.5">Using Stanton · March 6</div>
+                <div className="text-sm text-[#F0B429] font-bold">450 Foot Homerun</div>
+                <div className="text-xs text-[#4A5772] mt-0.5">Using Naylor · March 25</div>
               </motion.div>
             </div>
           </div>

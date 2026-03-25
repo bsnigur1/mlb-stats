@@ -44,6 +44,7 @@ export default function LiveGamePage() {
   const [game, setGame] = useState<Game | null>(null);
   const [gamePlayers, setGamePlayers] = useState<(GamePlayer & { player: Player })[]>([]);
   const [atBats, setAtBats] = useState<AtBat[]>([]);
+  const [pitchingStats, setPitchingStats] = useState<Record<string, { outs: number; k: number; bb: number; h: number; er: number }>>({});
   const [loading, setLoading] = useState(true);
 
   // Calculate current batter index
@@ -96,6 +97,27 @@ export default function LiveGamePage() {
       .order('created_at');
 
     setAtBats(atBatsData || []);
+
+    // Load pitching stats if tracking pitching
+    if (gameData.track_pitching) {
+      const { data: pitchingData } = await supabase
+        .from('pitching_stats')
+        .select('*')
+        .eq('game_id', gameId);
+
+      const stats: Record<string, { outs: number; k: number; bb: number; h: number; er: number }> = {};
+      pitchingData?.forEach((ps: { player_id: string; outs_recorded: number; strikeouts: number; walks: number; hits_allowed: number; earned_runs: number }) => {
+        stats[ps.player_id] = {
+          outs: ps.outs_recorded,
+          k: ps.strikeouts,
+          bb: ps.walks,
+          h: ps.hits_allowed,
+          er: ps.earned_runs,
+        };
+      });
+      setPitchingStats(stats);
+    }
+
     setLoading(false);
   }, [gameId, router]);
 
@@ -147,6 +169,33 @@ export default function LiveGamePage() {
         () => {
           // Reload at-bats on delete (undo)
           loadGame();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pitching_stats',
+          filter: `game_id=eq.${gameId}`,
+        },
+        (payload) => {
+          // Update pitching stats on any change
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const ps = payload.new as { player_id: string; outs_recorded: number; strikeouts: number; walks: number; hits_allowed: number; earned_runs: number };
+            setPitchingStats((prev) => ({
+              ...prev,
+              [ps.player_id]: {
+                outs: ps.outs_recorded,
+                k: ps.strikeouts,
+                bb: ps.walks,
+                h: ps.hits_allowed,
+                er: ps.earned_runs,
+              },
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            loadGame();
+          }
         }
       )
       .subscribe();
@@ -316,6 +365,49 @@ export default function LiveGamePage() {
             })}
           </div>
         </motion.div>
+
+        {/* Pitching Stats Summary */}
+        {game.track_pitching && Object.keys(pitchingStats).length > 0 && (
+          <motion.div
+            custom={2.5}
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            className="rounded-xl p-4"
+            style={{ background: '#0F1829', border: '1px solid rgba(239,68,68,0.2)' }}
+          >
+            <h3 className="text-[11px] text-[#EF4444] uppercase tracking-widest mb-3">Pitching</h3>
+            <div className="space-y-2">
+              {gamePlayers.map((gp) => {
+                const ps = pitchingStats[gp.player_id] || { outs: 0, k: 0, bb: 0, h: 0, er: 0 };
+                const innings = Math.floor(ps.outs / 3);
+                const partialOuts = ps.outs % 3;
+                const ipDisplay = partialOuts > 0 ? `${innings}.${partialOuts}` : `${innings}.0`;
+                const era = ps.outs > 0 ? (ps.er / ps.outs) * 27 : 0;
+
+                if (ps.outs === 0 && ps.k === 0 && ps.bb === 0 && ps.h === 0) return null;
+
+                return (
+                  <div key={`pitch-${gp.id}`} className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
+                        style={{ background: 'rgba(239,68,68,0.15)', color: '#EF4444' }}
+                      >
+                        {gp.player.name[0]}
+                      </div>
+                      <span className="text-sm font-medium text-[#EFF2FF]">{gp.player.name}</span>
+                    </div>
+                    <span className="text-sm text-[#8A9BBB] tabular-nums">
+                      {ipDisplay} IP, {ps.k} K, {ps.bb} BB, {ps.h} H, {ps.er} ER
+                      <span className="text-[#EF4444] ml-2">({era.toFixed(2)} ERA)</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* Recent At-Bats Feed */}
         <motion.div
