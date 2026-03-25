@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { Player, AtBat, Game, Session, Season } from '@/lib/types';
 import { filterAtBatsBySeason, countGamesInSeason } from '@/lib/stats';
 
-type SortKey = 'name' | 'games' | 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'h' | 'doubles' | 'triples' | 'ab' | 'bb' | 'kPercent';
+type SortKey = 'name' | 'games' | 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'h' | 'doubles' | 'triples' | 'ab' | 'bb' | 'kPercent' | 'abPerHr' | 'abPerRbi';
 type PitchingSortKey = 'name' | 'ip' | 'k' | 'bb' | 'h' | 'er' | 'era' | 'whip';
 
 interface PitchingStatRow {
@@ -49,6 +49,8 @@ interface PlayerStats {
   slg: number;
   ops: number;
   kPercent: number;
+  abPerHr: number | null;
+  abPerRbi: number | null;
 }
 
 function calculatePlayerStats(
@@ -80,6 +82,10 @@ function calculatePlayerStats(
     g.game_players?.some((gp) => gp.player_id === player.id)
   ).length;
 
+  // Calculate AB per HR and AB per RBI (lower is better)
+  const abPerHr = homeruns > 0 ? ab / homeruns : null;
+  const abPerRbi = rbi > 0 ? ab / rbi : null;
+
   return {
     player,
     games: playerGames,
@@ -97,6 +103,8 @@ function calculatePlayerStats(
     slg,
     ops,
     kPercent,
+    abPerHr,
+    abPerRbi,
   };
 }
 
@@ -214,6 +222,10 @@ export default function StatsPage() {
         ? String(aVal).localeCompare(String(bVal))
         : String(bVal).localeCompare(String(aVal));
     }
+    // Handle null values for AB/HR and AB/RBI - nulls go to the end
+    if (aVal === null && bVal === null) return 0;
+    if (aVal === null) return 1;
+    if (bVal === null) return -1;
     return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
   });
 
@@ -222,7 +234,8 @@ export default function StatsPage() {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     } else {
       setSortKey(key);
-      setSortDir('desc');
+      // For AB/HR and AB/RBI, lower is better so default to ascending
+      setSortDir(key === 'abPerHr' || key === 'abPerRbi' ? 'asc' : 'desc');
     }
   };
 
@@ -311,20 +324,22 @@ export default function StatsPage() {
     );
   }
 
-  const columns: { key: SortKey; label: string; format?: (v: number) => string }[] = [
+  const columns: { key: SortKey; label: string; format?: (v: number | null) => string }[] = [
     { key: 'name', label: 'Player' },
     { key: 'ab', label: 'AB' },
-    { key: 'avg', label: 'AVG', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
-    { key: 'obp', label: 'OBP', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
-    { key: 'slg', label: 'SLG', format: (v) => v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
-    { key: 'ops', label: 'OPS', format: (v) => v.toFixed(3) },
+    { key: 'avg', label: 'AVG', format: (v) => v && v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
+    { key: 'obp', label: 'OBP', format: (v) => v && v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
+    { key: 'slg', label: 'SLG', format: (v) => v && v > 0 ? `.${String(Math.round(v * 1000)).padStart(3, '0')}` : '.000' },
+    { key: 'ops', label: 'OPS', format: (v) => v !== null ? v.toFixed(3) : '-' },
     { key: 'hr', label: 'HR' },
+    { key: 'abPerHr', label: 'AB/HR', format: (v) => v !== null ? v.toFixed(1) : '-' },
     { key: 'rbi', label: 'RBI' },
+    { key: 'abPerRbi', label: 'AB/RBI', format: (v) => v !== null ? v.toFixed(1) : '-' },
     { key: 'h', label: 'H' },
     { key: 'doubles', label: '2B' },
     { key: 'triples', label: '3B' },
     { key: 'bb', label: 'BB' },
-    { key: 'kPercent', label: 'K%', format: (v) => `${v.toFixed(1)}%` },
+    { key: 'kPercent', label: 'K%', format: (v) => v !== null ? `${v.toFixed(1)}%` : '-' },
   ];
 
   return (
@@ -397,7 +412,7 @@ export default function StatsPage() {
           className="rounded-lg overflow-x-auto"
           style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
         >
-          <table className="w-full min-w-[700px]">
+          <table className="w-full min-w-[850px]">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                 {columns.map((col) => (
@@ -456,7 +471,13 @@ export default function StatsPage() {
                     {ps.ops.toFixed(3)}
                   </td>
                   <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.hr}</td>
+                  <td className="px-3 py-3 text-sm text-[#22C55E] text-right tabular-nums font-medium">
+                    {ps.abPerHr !== null ? ps.abPerHr.toFixed(1) : '-'}
+                  </td>
                   <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.rbi}</td>
+                  <td className="px-3 py-3 text-sm text-[#22C55E] text-right tabular-nums font-medium">
+                    {ps.abPerRbi !== null ? ps.abPerRbi.toFixed(1) : '-'}
+                  </td>
                   <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.h}</td>
                   <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.doubles}</td>
                   <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.triples}</td>
