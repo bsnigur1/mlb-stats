@@ -239,7 +239,95 @@ export default function GamePage() {
 
   useEffect(() => {
     loadGame();
-  }, [loadGame]);
+
+    // Set up real-time subscriptions for live updates
+    const gameChannel = supabase
+      .channel(`game-updates-${gameId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `id=eq.${gameId}`,
+        },
+        (payload) => {
+          const updatedGame = payload.new as Game;
+          setGame(updatedGame);
+          if (updatedGame.track_pitching) {
+            setCurrentPitcherId(updatedGame.current_pitcher_id);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'at_bats',
+          filter: `game_id=eq.${gameId}`,
+        },
+        (payload) => {
+          const newAtBat = payload.new as AtBat;
+          setAtBats((prev) => {
+            // Avoid duplicates
+            if (prev.some(ab => ab.id === newAtBat.id)) return prev;
+            const updated = [...prev, newAtBat];
+            // Recalculate batter index
+            if (game?.game_mode === '1v1') {
+              setCurrentBatterIndex(calculateH2HBatterIndex(updated, gamePlayers.length));
+            } else {
+              setCurrentBatterIndex(updated.length % gamePlayers.length);
+            }
+            return updated;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'at_bats',
+          filter: `game_id=eq.${gameId}`,
+        },
+        () => {
+          // Reload on delete (undo)
+          loadGame();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pitching_stats',
+          filter: `game_id=eq.${gameId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const ps = payload.new as { player_id: string; outs_recorded: number; strikeouts: number; walks: number; hits_allowed: number; earned_runs: number };
+            setPitchingStats((prev) => ({
+              ...prev,
+              [ps.player_id]: {
+                outs: ps.outs_recorded,
+                k: ps.strikeouts,
+                bb: ps.walks,
+                h: ps.hits_allowed,
+                er: ps.earned_runs,
+              },
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            loadGame();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(gameChannel);
+    };
+  }, [loadGame, gameId, game?.game_mode, gamePlayers.length, calculateH2HBatterIndex]);
 
   const recordAtBat = async () => {
     if (!pendingResult || !game) return;

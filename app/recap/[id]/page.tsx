@@ -26,6 +26,7 @@ export default function RecapPage() {
   const [game, setGame] = useState<Game | null>(null);
   const [gamePlayers, setGamePlayers] = useState<(GamePlayer & { player: Player })[]>([]);
   const [atBats, setAtBats] = useState<AtBat[]>([]);
+  const [pitchingStats, setPitchingStats] = useState<Record<string, { outs: number; k: number; bb: number; h: number; er: number }>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -53,6 +54,27 @@ export default function RecapPage() {
         .order('created_at');
 
       setAtBats(atBatsData || []);
+
+      // Load pitching stats if game tracked pitching
+      if (gameData?.track_pitching) {
+        const { data: pitchingData } = await supabase
+          .from('pitching_stats')
+          .select('*')
+          .eq('game_id', gameId);
+
+        const stats: Record<string, { outs: number; k: number; bb: number; h: number; er: number }> = {};
+        pitchingData?.forEach((ps: { player_id: string; outs_recorded: number; strikeouts: number; walks: number; hits_allowed: number; earned_runs: number }) => {
+          stats[ps.player_id] = {
+            outs: ps.outs_recorded,
+            k: ps.strikeouts,
+            bb: ps.walks,
+            h: ps.hits_allowed,
+            er: ps.earned_runs,
+          };
+        });
+        setPitchingStats(stats);
+      }
+
       setLoading(false);
     }
 
@@ -230,9 +252,74 @@ export default function RecapPage() {
           </motion.div>
         ))}
 
+        {/* Pitching Stats */}
+        {game.track_pitching && Object.keys(pitchingStats).length > 0 && (
+          <motion.div
+            custom={playerStats.length + 1}
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            className="rounded-xl p-5"
+            style={{ background: '#0F1829', border: '1px solid rgba(239,68,68,0.2)' }}
+          >
+            <h3 className="text-sm font-semibold text-[#EF4444] uppercase tracking-wider mb-4">
+              Pitching Stats
+            </h3>
+            <div className="space-y-4">
+              {gamePlayers.map((gp) => {
+                const ps = pitchingStats[gp.player_id];
+                if (!ps || (ps.outs === 0 && ps.k === 0 && ps.bb === 0 && ps.h === 0)) return null;
+
+                const innings = Math.floor(ps.outs / 3);
+                const partialOuts = ps.outs % 3;
+                const ipDisplay = partialOuts > 0 ? `${innings}.${partialOuts}` : `${innings}.0`;
+                const era = ps.outs > 0 ? (ps.er / ps.outs) * 27 : 0;
+                const whip = ps.outs > 0 ? ((ps.bb + ps.h) / ps.outs) * 3 : 0;
+
+                return (
+                  <div key={`pitch-${gp.id}`} className="flex items-center gap-3">
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold"
+                      style={{ background: 'rgba(239,68,68,0.15)', color: '#EF4444' }}
+                    >
+                      {gp.player.name[0]}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-[#EFF2FF]">{gp.player.name}</div>
+                      <div className="text-xs text-[#4A5772]">{ipDisplay} IP</div>
+                    </div>
+                    <div className="grid grid-cols-5 gap-3 text-center">
+                      <div>
+                        <div className="text-sm font-semibold text-[#22C55E]">{ps.k}</div>
+                        <div className="text-[9px] text-[#4A5772]">K</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-[#F0B429]">{ps.bb}</div>
+                        <div className="text-[9px] text-[#4A5772]">BB</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-[#EF4444]">{ps.h}</div>
+                        <div className="text-[9px] text-[#4A5772]">H</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-[#EFF2FF]">{ps.er}</div>
+                        <div className="text-[9px] text-[#4A5772]">ER</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-[#EF4444]">{era.toFixed(2)}</div>
+                        <div className="text-[9px] text-[#4A5772]">ERA</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
         {/* Actions */}
         <motion.div
-          custom={playerStats.length + 1}
+          custom={playerStats.length + (game.track_pitching ? 2 : 1)}
           variants={fadeUp}
           initial="hidden"
           animate="visible"
