@@ -198,7 +198,9 @@ export default function LiveGamePage() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+      });
 
     return () => {
       supabase.removeChannel(gameChannel);
