@@ -239,8 +239,10 @@ export default function GamePage() {
 
   useEffect(() => {
     loadGame();
+  }, [loadGame]);
 
-    // Set up real-time subscriptions for live updates
+  // Separate effect for realtime subscriptions - only depends on gameId
+  useEffect(() => {
     const gameChannel = supabase
       .channel(`game-updates-${gameId}`)
       .on(
@@ -267,20 +269,9 @@ export default function GamePage() {
           table: 'at_bats',
           filter: `game_id=eq.${gameId}`,
         },
-        (payload) => {
-          const newAtBat = payload.new as AtBat;
-          setAtBats((prev) => {
-            // Avoid duplicates
-            if (prev.some(ab => ab.id === newAtBat.id)) return prev;
-            const updated = [...prev, newAtBat];
-            // Recalculate batter index
-            if (game?.game_mode === '1v1') {
-              setCurrentBatterIndex(calculateH2HBatterIndex(updated, gamePlayers.length));
-            } else {
-              setCurrentBatterIndex(updated.length % gamePlayers.length);
-            }
-            return updated;
-          });
+        () => {
+          // Reload game to get fresh data and recalculate batter
+          loadGame();
         }
       )
       .on(
@@ -292,7 +283,6 @@ export default function GamePage() {
           filter: `game_id=eq.${gameId}`,
         },
         () => {
-          // Reload on delete (undo)
           loadGame();
         }
       )
@@ -327,7 +317,7 @@ export default function GamePage() {
     return () => {
       supabase.removeChannel(gameChannel);
     };
-  }, [loadGame, gameId, game?.game_mode, gamePlayers.length, calculateH2HBatterIndex]);
+  }, [gameId, loadGame]);
 
   const recordAtBat = async () => {
     if (!pendingResult || !game) return;
