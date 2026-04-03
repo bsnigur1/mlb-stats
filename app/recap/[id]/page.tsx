@@ -9,6 +9,8 @@ import { supabase } from '@/lib/supabase';
 import { Player, Game, GamePlayer, AtBat } from '@/lib/types';
 import { calculateStats, formatAvg, formatPercent } from '@/lib/stats';
 
+const EDIT_MODE_KEY = 'theyard_edit_mode';
+
 // Animation variants
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
@@ -28,6 +30,13 @@ export default function RecapPage() {
   const [atBats, setAtBats] = useState<AtBat[]>([]);
   const [pitchingStats, setPitchingStats] = useState<Record<string, { outs: number; k: number; bb: number; h: number; er: number }>>({});
   const [loading, setLoading] = useState(true);
+  const [editModeEnabled, setEditModeEnabled] = useState(false);
+
+  useEffect(() => {
+    // Check edit mode from localStorage
+    const stored = localStorage.getItem(EDIT_MODE_KEY);
+    setEditModeEnabled(stored === 'true');
+  }, []);
 
   useEffect(() => {
     async function loadGame() {
@@ -325,16 +334,18 @@ export default function RecapPage() {
           animate="visible"
           className="flex gap-3 pt-4"
         >
-          <Link href={`/game/${gameId}/edit`} className="flex-1">
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
-              style={{ background: '#162035', color: '#F0B429', border: '1px solid rgba(240,180,41,0.3)' }}
-            >
-              <Pencil size={16} />
-              Edit Game
-            </motion.button>
-          </Link>
+          {editModeEnabled && (
+            <Link href={`/game/${gameId}/edit`} className="flex-1">
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
+                style={{ background: '#162035', color: '#F0B429', border: '1px solid rgba(240,180,41,0.3)' }}
+              >
+                <Pencil size={16} />
+                Edit Game
+              </motion.button>
+            </Link>
+          )}
           <Link href="/log" className="flex-1">
             <motion.button
               whileTap={{ scale: 0.97 }}
