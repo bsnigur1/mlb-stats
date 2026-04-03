@@ -205,7 +205,7 @@ export default function LiveGamePage() {
     // Polling fallback - refresh every 10s in case realtime drops
     const pollInterval = setInterval(() => {
       loadGame();
-    }, 10000);
+    }, 1000);
 
     return () => {
       supabase.removeChannel(gameChannel);
