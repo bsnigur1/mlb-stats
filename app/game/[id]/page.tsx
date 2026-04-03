@@ -31,11 +31,13 @@ const AT_BAT_BUTTONS: { result: AtBatResult; label: string; color: string; needs
 ];
 
 // Pitching event types
-type PitchingResult = 'k' | 'bb' | 'single' | 'double' | 'triple' | 'hr' | 'out' | 'dp';
-const PITCHING_BUTTONS: { result: PitchingResult; label: string; color: string; isOut: boolean; outsRecorded: number; bases: number }[] = [
-  { result: 'k', label: 'Strikeout', color: '#22C55E', isOut: true, outsRecorded: 1, bases: 0 },
+type PitchingResult = 'k' | 'k_reached' | 'bb' | 'single' | 'double' | 'triple' | 'hr' | 'out' | 'dp' | 'error';
+const PITCHING_BUTTONS: { result: PitchingResult; label: string; color: string; isOut: boolean; outsRecorded: number; bases: number; isK?: boolean }[] = [
+  { result: 'k', label: 'Strikeout', color: '#22C55E', isOut: true, outsRecorded: 1, bases: 0, isK: true },
+  { result: 'k_reached', label: 'K (Reached)', color: '#22C55E', isOut: false, outsRecorded: 0, bases: 1, isK: true },
   { result: 'out', label: 'Out (In Play)', color: '#6B7280', isOut: true, outsRecorded: 1, bases: 0 },
   { result: 'dp', label: 'Double Play', color: '#6B7280', isOut: true, outsRecorded: 2, bases: 0 },
+  { result: 'error', label: 'Error', color: '#8B5CF6', isOut: false, outsRecorded: 0, bases: 1 },
   { result: 'bb', label: 'Walk', color: '#F0B429', isOut: false, outsRecorded: 0, bases: 1 },
   { result: 'single', label: 'Single', color: '#EF4444', isOut: false, outsRecorded: 0, bases: 1 },
   { result: 'double', label: 'Double', color: '#EF4444', isOut: false, outsRecorded: 0, bases: 2 },
@@ -388,11 +390,11 @@ export default function GamePage() {
   };
 
   const handleButtonClick = (result: AtBatResult, needsRbi: boolean) => {
-    if (needsRbi) {
-      setPendingResult(result);
-    } else {
-      setPendingResult(result);
+    // For homerun, minimum RBI is 1 (you always score yourself)
+    if (result === 'homerun') {
+      setRbiInput(1);
     }
+    setPendingResult(result);
   };
 
   // Quick record hit when bases empty - no confirmation needed
@@ -571,6 +573,7 @@ export default function GamePage() {
     const outsToRecord = buttonInfo?.outsRecorded || 0;
     const isHit = ['single', 'double', 'triple', 'hr'].includes(pendingPitchingResult);
     const isWalk = pendingPitchingResult === 'bb';
+    const isError = pendingPitchingResult === 'error';
 
     // Save state for undo
     const prevBaserunners = [...baserunners];
@@ -701,10 +704,85 @@ export default function GamePage() {
           runsByPitcher[runner.pitcher_id] = (runsByPitcher[runner.pitcher_id] || 0) + 1;
         }
       }
+    } else if (pendingPitchingResult === 'k_reached') {
+      // Strikeout but batter reached (dropped 3rd strike / wild pitch)
+      // Batter goes to first, counts as K but not an out
+      const onFirst = baserunners.find(r => r.base === 1);
+      if (onFirst) {
+        // Force advance - same as walk
+        const onSecond = baserunners.find(r => r.base === 2);
+        const onThird = baserunners.find(r => r.base === 3);
+        if (onFirst && onSecond && onThird) {
+          totalRuns = 1;
+          runsByPitcher[onThird.pitcher_id] = 1;
+          newBaserunners = [
+            { base: 1, pitcher_id: currentPitcherId },
+            { base: 2, pitcher_id: onFirst.pitcher_id },
+            { base: 3, pitcher_id: onSecond.pitcher_id },
+          ];
+        } else if (onSecond) {
+          newBaserunners = [
+            { base: 1, pitcher_id: currentPitcherId },
+            { base: 2, pitcher_id: onFirst.pitcher_id },
+            { base: 3, pitcher_id: onSecond.pitcher_id },
+          ];
+        } else {
+          newBaserunners = [
+            { base: 1, pitcher_id: currentPitcherId },
+            { base: 2, pitcher_id: onFirst.pitcher_id },
+            ...(onThird ? [onThird] : []),
+          ];
+        }
+      } else {
+        // First base empty, batter just takes first
+        newBaserunners = [
+          { base: 1, pitcher_id: currentPitcherId },
+          ...baserunners.filter(r => r.base !== 1),
+        ];
+      }
+    } else if (isError) {
+      // Reached on error - batter on first, runs don't count as earned
+      // Use '__error__' as pitcher_id so runs aren't attributed to ERA
+      const onFirst = baserunners.find(r => r.base === 1);
+      if (onFirst) {
+        // Force advance similar to walk
+        const onSecond = baserunners.find(r => r.base === 2);
+        const onThird = baserunners.find(r => r.base === 3);
+        if (onFirst && onSecond && onThird) {
+          totalRuns = 1;
+          // Don't attribute to any pitcher - it's an error
+          newBaserunners = [
+            { base: 1, pitcher_id: '__error__' },
+            { base: 2, pitcher_id: onFirst.pitcher_id },
+            { base: 3, pitcher_id: onSecond.pitcher_id },
+          ];
+        } else if (onSecond) {
+          newBaserunners = [
+            { base: 1, pitcher_id: '__error__' },
+            { base: 2, pitcher_id: onFirst.pitcher_id },
+            { base: 3, pitcher_id: onSecond.pitcher_id },
+          ];
+        } else {
+          newBaserunners = [
+            { base: 1, pitcher_id: '__error__' },
+            { base: 2, pitcher_id: onFirst.pitcher_id },
+            ...(onThird ? [onThird] : []),
+          ];
+        }
+      } else {
+        // First base empty
+        newBaserunners = [
+          { base: 1, pitcher_id: '__error__' },
+          ...baserunners.filter(r => r.base !== 1),
+        ];
+      }
     }
 
-    // Update pitching stats for each pitcher who gave up runs
+    // Update pitching stats for each pitcher who gave up runs (skip __error__ runners)
     for (const [pitcherId, runs] of Object.entries(runsByPitcher)) {
+      // Skip error runners - they don't count toward ERA
+      if (pitcherId === '__error__') continue;
+
       const { data: existingStats } = await supabase
         .from('pitching_stats')
         .select('*')
@@ -734,8 +812,9 @@ export default function GamePage() {
       .eq('player_id', currentPitcherId)
       .single();
 
+    const isStrikeout = buttonInfo?.isK || false;
     const statsChanges = {
-      k: pendingPitchingResult === 'k' ? 1 : 0,
+      k: isStrikeout ? 1 : 0,
       bb: isWalk ? 1 : 0,
       h: isHit ? 1 : 0,
     };
@@ -795,8 +874,9 @@ export default function GamePage() {
       er: newPitchingStats[currentPitcherId].er + (runsByPitcher[currentPitcherId] || 0),
     };
 
-    // Update earned runs for other pitchers
+    // Update earned runs for other pitchers (skip __error__ runners)
     for (const [pitcherId, runs] of Object.entries(runsByPitcher)) {
+      if (pitcherId === '__error__') continue;
       if (pitcherId !== currentPitcherId) {
         if (!newPitchingStats[pitcherId]) {
           newPitchingStats[pitcherId] = { outs: 0, k: 0, bb: 0, h: 0, er: 0 };
@@ -1386,9 +1466,9 @@ export default function GamePage() {
               animate="visible"
               className="space-y-3"
             >
-              {/* Outs row */}
-              <div className="grid grid-cols-3 gap-3">
-                {PITCHING_BUTTONS.filter(b => b.isOut).map(({ result, label, color }) => (
+              {/* Outs and Strikeouts row */}
+              <div className="grid grid-cols-4 gap-2">
+                {PITCHING_BUTTONS.filter(b => b.isOut || b.isK).map(({ result, label, color }) => (
                   <motion.button
                     key={result}
                     whileTap={{ scale: 0.97 }}
@@ -1397,22 +1477,19 @@ export default function GamePage() {
                         alert('Select a pitcher first');
                         return;
                       }
-                      // If no runners, record immediately (except DP which needs runners)
-                      if (baserunners.length === 0 && result !== 'dp') {
-                        setManualRunners({ first: false, second: false, third: false });
-                        setRunsInput(0);
-                        setPendingPitchingResult(result);
-                      } else if (result === 'dp' && baserunners.length === 0) {
+                      if (result === 'dp' && baserunners.length === 0) {
                         alert('Double play requires runners on base');
                         return;
-                      } else {
-                        // Has runners - need to confirm runner positions
-                        setManualRunners({ first: false, second: false, third: false });
-                        setRunsInput(0);
-                        setPendingPitchingResult(result);
                       }
+                      // For k_reached, if someone on first, need confirmation (force advance)
+                      const needsConfirmation = baserunners.length > 0 ||
+                        (result === 'k_reached' && baserunners.some(r => r.base === 1));
+
+                      setManualRunners({ first: false, second: false, third: false });
+                      setRunsInput(0);
+                      setPendingPitchingResult(result);
                     }}
-                    className="py-4 rounded-xl font-bold text-sm transition-all"
+                    className="py-3 rounded-xl font-bold text-sm transition-all"
                     style={{
                       background: `${color}20`,
                       border: `1px solid ${color}50`,
@@ -1424,15 +1501,22 @@ export default function GamePage() {
                   </motion.button>
                 ))}
               </div>
-              {/* Hits row */}
-              <div className="grid grid-cols-4 gap-2">
-                {PITCHING_BUTTONS.filter(b => !b.isOut && b.result !== 'bb').map(({ result, label, color, bases }) => (
+              {/* Hits and Error row */}
+              <div className="grid grid-cols-5 gap-2">
+                {PITCHING_BUTTONS.filter(b => !b.isOut && !b.isK && b.result !== 'bb').map(({ result, label, color, bases }) => (
                   <motion.button
                     key={result}
                     whileTap={{ scale: 0.97 }}
                     onClick={() => {
                       if (!currentPitcherId) {
                         alert('Select a pitcher first');
+                        return;
+                      }
+                      // For error, go straight to confirmation (no quick hit)
+                      if (result === 'error') {
+                        setManualRunners({ first: false, second: false, third: false });
+                        setRunsInput(0);
+                        setPendingPitchingResult(result);
                         return;
                       }
                       // If bases empty and not HR, just record it immediately
@@ -1678,7 +1762,8 @@ export default function GamePage() {
               <div className="text-lg text-[#EFF2FF] font-semibold">How many RBIs?</div>
             </div>
             <div className="flex justify-center gap-3">
-              {[0, 1, 2, 3, 4].map((num) => (
+              {/* For homerun, min RBI is 1 (you always score yourself) */}
+              {(pendingResult === 'homerun' ? [1, 2, 3, 4] : [0, 1, 2, 3, 4]).map((num) => (
                 <motion.button
                   key={num}
                   whileTap={{ scale: 0.95 }}
