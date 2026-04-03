@@ -202,8 +202,14 @@ export default function LiveGamePage() {
         console.log('Realtime subscription status:', status);
       });
 
+    // Polling fallback - refresh every 10s in case realtime drops
+    const pollInterval = setInterval(() => {
+      loadGame();
+    }, 10000);
+
     return () => {
       supabase.removeChannel(gameChannel);
+      clearInterval(pollInterval);
     };
   }, [gameId, loadGame, router]);
 
