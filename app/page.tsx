@@ -715,12 +715,12 @@ export default function Dashboard() {
                     className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
                     style={{ background: 'rgba(240,180,41,0.15)', color: '#F0B429' }}
                   >
-                    B
+                    G
                   </div>
-                  <span className="text-sm font-semibold text-[#EFF2FF]">Bryan</span>
+                  <span className="text-sm font-semibold text-[#EFF2FF]">Greg</span>
                 </div>
-                <div className="text-sm text-[#F0B429] font-bold">450 Foot Homerun</div>
-                <div className="text-xs text-[#4A5772] mt-0.5">Using Naylor · March 25</div>
+                <div className="text-sm text-[#F0B429] font-bold">498 Foot Homerun</div>
+                <div className="text-xs text-[#4A5772] mt-0.5">Using Judge · April 2</div>
               </motion.div>
             </div>
           </div>
