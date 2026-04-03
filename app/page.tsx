@@ -522,18 +522,14 @@ export default function Dashboard() {
 
   // Sort by avg for leaderboard
   const sortedByAvg = [...playerStats].sort((a, b) => b.avg - a.avg);
-  // Sort by AB per HR (lower is better, null values go to end)
-  const sortedByAbPerHr = [...playerStats]
-    .filter(p => p.abPerHr !== null)
-    .sort((a, b) => (a.abPerHr as number) - (b.abPerHr as number));
-  // Sort by AB per RBI (lower is better, null values go to end)
-  const sortedByAbPerRbi = [...playerStats]
-    .filter(p => p.abPerRbi !== null)
-    .sort((a, b) => (a.abPerRbi as number) - (b.abPerRbi as number));
+  // Sort by total HR (higher is better)
+  const sortedByHr = [...playerStats].sort((a, b) => b.homeruns - a.homeruns);
+  // Sort by total RBI (higher is better)
+  const sortedByRbi = [...playerStats].sort((a, b) => b.rbi - a.rbi);
 
   const leader = sortedByAvg[0];
-  const hrLeader = sortedByAbPerHr[0];
-  const rbiLeader = sortedByAbPerRbi[0];
+  const hrLeader = sortedByHr[0];
+  const rbiLeader = sortedByRbi[0];
 
   if (loading) {
     return (
@@ -635,15 +631,15 @@ export default function Dashboard() {
                 index={0}
               />
               <LeaderCard
-                label="AB per HR"
+                label="Home Runs"
                 player={hrLeader?.player.name || '-'}
-                value={hrLeader?.abPerHr ? hrLeader.abPerHr.toFixed(1) : '-'}
+                value={hrLeader?.homeruns?.toString() || '0'}
                 index={1}
               />
               <LeaderCard
-                label="AB per RBI"
+                label="RBIs"
                 player={rbiLeader?.player.name || '-'}
-                value={rbiLeader?.abPerRbi ? rbiLeader.abPerRbi.toFixed(1) : '-'}
+                value={rbiLeader?.rbi?.toString() || '0'}
                 index={2}
               />
             </div>
