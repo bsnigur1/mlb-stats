@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Home, Play } from 'lucide-react';
+import { ArrowLeft, Home, Play, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { Player, Game, GamePlayer, AtBat } from '@/lib/types';
@@ -325,6 +325,16 @@ export default function RecapPage() {
           animate="visible"
           className="flex gap-3 pt-4"
         >
+          <Link href={`/game/${gameId}/edit`} className="flex-1">
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
+              style={{ background: '#162035', color: '#F0B429', border: '1px solid rgba(240,180,41,0.3)' }}
+            >
+              <Pencil size={16} />
+              Edit Game
+            </motion.button>
+          </Link>
           <Link href="/log" className="flex-1">
             <motion.button
               whileTap={{ scale: 0.97 }}
