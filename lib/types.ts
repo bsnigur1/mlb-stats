@@ -73,6 +73,7 @@ export interface Game {
   h2h_player1_id: string | null;
   h2h_player2_id: string | null;
   h2h_winner_id: string | null;
+  h2h_difficulty: string | null;
   mvp_player_id: string | null;
   // Pitching tracking
   track_pitching: boolean;

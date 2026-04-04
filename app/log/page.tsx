@@ -78,6 +78,14 @@ function StartGameContent() {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [addingPlayer, setAddingPlayer] = useState(false);
 
+  // H2H quick log state
+  const [h2hPlayer1, setH2hPlayer1] = useState<string | null>(null);
+  const [h2hPlayer2, setH2hPlayer2] = useState<string | null>(null);
+  const [h2hDifficulty, setH2hDifficulty] = useState<'rookie' | 'minors' | 'pro' | 'all-star' | 'hall-of-fame'>('pro');
+  const [h2hInnings, setH2hInnings] = useState('9');
+  const [h2hPlayer1Score, setH2hPlayer1Score] = useState('');
+  const [h2hPlayer2Score, setH2hPlayer2Score] = useState('');
+
   useEffect(() => {
     async function loadData() {
       const [playersRes, seasonsRes] = await Promise.all([
@@ -117,10 +125,58 @@ function StartGameContent() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      // Don't create session yet - sessions are created/assigned when game is completed
-      // This prevents empty sessions from being created if user quits mid-game
+      // For 1v1 mode, create a completed game directly (quick log)
+      if (gameMode === '1v1' && h2hPlayer1 && h2hPlayer2) {
+        const p1Score = parseInt(h2hPlayer1Score) || 0;
+        const p2Score = parseInt(h2hPlayer2Score) || 0;
+        const winnerId = p1Score > p2Score ? h2hPlayer1 : p2Score > p1Score ? h2hPlayer2 : null;
+        const p1Player = players.find(p => p.id === h2hPlayer1);
+        const p2Player = players.find(p => p.id === h2hPlayer2);
 
-      // Create game in 'in_progress' state with no session
+        // Determine score string from Player 1's perspective
+        const scoreStr = p1Score > p2Score
+          ? `W ${p1Score}-${p2Score}`
+          : p2Score > p1Score
+          ? `L ${p1Score}-${p2Score}`
+          : `T ${p1Score}-${p2Score}`;
+
+        // Create completed game
+        const { data: game } = await supabase
+          .from('games')
+          .insert({
+            session_id: null,
+            season_id: activeSeason?.id || null,
+            date: today,
+            status: 'completed',
+            current_inning: parseInt(h2hInnings) || 9,
+            current_outs: 0,
+            innings: parseInt(h2hInnings) || 9,
+            game_mode: '1v1',
+            h2h_player1_id: h2hPlayer1,
+            h2h_player2_id: h2hPlayer2,
+            h2h_winner_id: winnerId,
+            h2h_difficulty: h2hDifficulty,
+            score: scoreStr,
+            track_pitching: false,
+            batting_first: true,
+          })
+          .select()
+          .single();
+
+        if (!game) throw new Error('Failed to create game');
+
+        // Add game players
+        await supabase.from('game_players').insert([
+          { game_id: game.id, player_id: h2hPlayer1, batting_order: 1 },
+          { game_id: game.id, player_id: h2hPlayer2, batting_order: 2 },
+        ]);
+
+        // Navigate to H2H page to see updated records
+        router.push('/h2h');
+        return;
+      }
+
+      // For co-op modes, create game in 'in_progress' state
       const currentPlayerId = selectedPlayers[0];
       const { data: game } = await supabase
         .from('games')
@@ -133,8 +189,8 @@ function StartGameContent() {
           current_outs: 0,
           innings: 9,
           game_mode: gameMode,
-          h2h_player1_id: gameMode === '1v1' ? currentPlayerId : null,
-          h2h_player2_id: gameMode === '1v1' ? h2hOpponent : null,
+          h2h_player1_id: null,
+          h2h_player2_id: null,
           track_pitching: trackPitching,
           batting_first: battingFirst,
         })
@@ -144,9 +200,7 @@ function StartGameContent() {
       if (!game) throw new Error('Failed to create game');
 
       // Add game players with batting order (deduplicate to prevent duplicate stats)
-      const playerIdsToAdd = gameMode === '1v1' && h2hOpponent
-        ? [currentPlayerId, h2hOpponent]
-        : [...new Set(battingOrder)].filter(id => selectedPlayers.includes(id));
+      const playerIdsToAdd = [...new Set(battingOrder)].filter(id => selectedPlayers.includes(id));
 
       const gamePlayers = playerIdsToAdd.map((playerId, idx) => ({
         game_id: game.id,
@@ -191,7 +245,7 @@ function StartGameContent() {
   };
 
   const canStart = gameMode === '1v1'
-    ? selectedPlayers.length === 1 && h2hOpponent
+    ? h2hPlayer1 && h2hPlayer2 && h2hPlayer1Score !== '' && h2hPlayer2Score !== ''
     : selectedPlayers.length >= 2;
 
   if (loading) {
@@ -407,12 +461,13 @@ function StartGameContent() {
           </motion.div>
         )}
 
-        {/* Player selection - for 1v1 mode */}
+        {/* Player selection - for 1v1 mode (quick log) */}
         {gameMode === '1v1' && (
           <>
+            {/* Player 1 */}
             <motion.div custom={1} variants={fadeUp} initial="hidden" animate="visible">
               <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
-                Who are you?
+                Player 1
               </label>
               <div className="flex gap-2 flex-wrap">
                 {players.map((player) => (
@@ -420,14 +475,14 @@ function StartGameContent() {
                     key={player.id}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
-                      setSelectedPlayers([player.id]);
-                      if (h2hOpponent === player.id) setH2hOpponent(null);
+                      setH2hPlayer1(player.id);
+                      if (h2hPlayer2 === player.id) setH2hPlayer2(null);
                     }}
                     className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium"
                     style={{
-                      background: selectedPlayers[0] === player.id ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.05)',
-                      border: `1px solid ${selectedPlayers[0] === player.id ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                      color: selectedPlayers[0] === player.id ? '#34D399' : '#8A9BBB',
+                      background: h2hPlayer1 === player.id ? 'rgba(96,165,250,0.15)' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${h2hPlayer1 === player.id ? 'rgba(96,165,250,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                      color: h2hPlayer1 === player.id ? '#60A5FA' : '#8A9BBB',
                     }}
                   >
                     <div
@@ -437,29 +492,30 @@ function StartGameContent() {
                       {player.name[0]}
                     </div>
                     {player.name}
-                    {selectedPlayers[0] === player.id && <Check size={14} />}
+                    {h2hPlayer1 === player.id && <Check size={14} />}
                   </motion.button>
                 ))}
               </div>
             </motion.div>
 
+            {/* Player 2 */}
             <motion.div custom={2} variants={fadeUp} initial="hidden" animate="visible">
               <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
-                Who are you playing against?
+                Player 2
               </label>
               <div className="flex gap-2 flex-wrap">
                 {players
-                  .filter((p) => p.id !== selectedPlayers[0])
+                  .filter((p) => p.id !== h2hPlayer1)
                   .map((player) => (
                     <motion.button
                       key={player.id}
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => setH2hOpponent(player.id)}
+                      onClick={() => setH2hPlayer2(player.id)}
                       className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium"
                       style={{
-                        background: h2hOpponent === player.id ? 'rgba(248,113,113,0.15)' : 'rgba(255,255,255,0.05)',
-                        border: `1px solid ${h2hOpponent === player.id ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                        color: h2hOpponent === player.id ? '#F87171' : '#8A9BBB',
+                        background: h2hPlayer2 === player.id ? 'rgba(248,113,113,0.15)' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${h2hPlayer2 === player.id ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                        color: h2hPlayer2 === player.id ? '#F87171' : '#8A9BBB',
                       }}
                     >
                       <div
@@ -469,9 +525,80 @@ function StartGameContent() {
                         {player.name[0]}
                       </div>
                       {player.name}
-                      {h2hOpponent === player.id && <Check size={14} />}
+                      {h2hPlayer2 === player.id && <Check size={14} />}
                     </motion.button>
                   ))}
+              </div>
+            </motion.div>
+
+            {/* Difficulty */}
+            <motion.div custom={3} variants={fadeUp} initial="hidden" animate="visible">
+              <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                Difficulty
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {(['rookie', 'minors', 'pro', 'all-star', 'hall-of-fame'] as const).map((diff) => (
+                  <motion.button
+                    key={diff}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setH2hDifficulty(diff)}
+                    className="px-3 py-2 rounded-lg text-xs font-medium capitalize"
+                    style={{
+                      background: h2hDifficulty === diff ? 'rgba(240,180,41,0.15)' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${h2hDifficulty === diff ? 'rgba(240,180,41,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                      color: h2hDifficulty === diff ? '#F0B429' : '#8A9BBB',
+                    }}
+                  >
+                    {diff.replace('-', ' ')}
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Innings and Score */}
+            <motion.div custom={4} variants={fadeUp} initial="hidden" animate="visible">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                    Innings
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={h2hInnings}
+                    onChange={(e) => setH2hInnings(e.target.value)}
+                    className="w-full px-3 py-3 rounded-lg text-center text-lg font-bold text-[#EFF2FF]"
+                    style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.1)' }}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                    {h2hPlayer1 ? players.find(p => p.id === h2hPlayer1)?.name : 'P1'} Score
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={h2hPlayer1Score}
+                    onChange={(e) => setH2hPlayer1Score(e.target.value)}
+                    placeholder="0"
+                    className="w-full px-3 py-3 rounded-lg text-center text-lg font-bold text-[#60A5FA] placeholder-[#4A5772]"
+                    style={{ background: '#0F1829', border: '1px solid rgba(96,165,250,0.3)' }}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                    {h2hPlayer2 ? players.find(p => p.id === h2hPlayer2)?.name : 'P2'} Score
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={h2hPlayer2Score}
+                    onChange={(e) => setH2hPlayer2Score(e.target.value)}
+                    placeholder="0"
+                    className="w-full px-3 py-3 rounded-lg text-center text-lg font-bold text-[#F87171] placeholder-[#4A5772]"
+                    style={{ background: '#0F1829', border: '1px solid rgba(248,113,113,0.3)' }}
+                  />
+                </div>
               </div>
             </motion.div>
           </>
@@ -552,7 +679,7 @@ function StartGameContent() {
             style={{ background: '#F0B429', color: '#080D18' }}
           >
             <Play size={20} />
-            {starting ? 'Starting...' : 'Start Game'}
+            {starting ? (gameMode === '1v1' ? 'Logging...' : 'Starting...') : (gameMode === '1v1' ? 'Log Game' : 'Start Game')}
           </motion.button>
         </motion.div>
       </div>
