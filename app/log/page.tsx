@@ -155,7 +155,7 @@ function StartGameContent() {
             h2h_player1_id: h2hPlayer1,
             h2h_player2_id: h2hPlayer2,
             h2h_winner_id: winnerId,
-            h2h_difficulty: h2hDifficulty,
+            // h2h_difficulty: h2hDifficulty, // TODO: add migration for this column
             score: scoreStr,
             track_pitching: false,
             batting_first: true,
