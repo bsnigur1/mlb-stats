@@ -9,7 +9,8 @@ export type AtBatResult =
   | 'double'
   | 'triple'
   | 'homerun'
-  | 'error';
+  | 'error'
+  | 'baserunner_out';
 
 export type HeatStatus = 'hot' | 'cold' | 'neutral';
 export type GameResult = 'W' | 'L';

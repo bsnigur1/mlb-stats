@@ -28,6 +28,7 @@ const AT_BAT_BUTTONS: { result: AtBatResult; label: string; color: string; needs
   { result: 'double_play', label: 'Double Play', color: '#6B7280', needsRbi: true, outsRecorded: 2 },
   { result: 'error', label: 'Reached on Error', color: '#8B5CF6', needsRbi: true },
   { result: 'walk', label: 'Walk', color: '#F0B429', needsRbi: false },
+  { result: 'baserunner_out', label: 'On-Base Out', color: '#9CA3AF', needsRbi: false, outsRecorded: 1 },
 ];
 
 // Pitching event types
@@ -326,6 +327,33 @@ export default function GamePage() {
 
     const currentPlayer = gamePlayers[currentBatterIndex];
     const buttonInfo = AT_BAT_BUTTONS.find(b => b.result === pendingResult);
+
+    // Handle baserunner out separately - no at-bat record, just the out
+    if (pendingResult === 'baserunner_out') {
+      let newOuts = game.current_outs + 1;
+      let newInning = game.current_inning;
+
+      if (newOuts >= 3) {
+        newOuts = 0;
+        newInning++;
+      }
+
+      await supabase
+        .from('games')
+        .update({ current_outs: newOuts, current_inning: newInning })
+        .eq('id', gameId);
+
+      setGame({ ...game, current_outs: newOuts, current_inning: newInning });
+
+      // Auto-switch to pitching mode after 3 outs (if tracking pitching)
+      if (game.track_pitching && newOuts === 0) {
+        setIsPitchingMode(true);
+        setBaserunners([]);
+      }
+
+      setPendingResult(null);
+      return;
+    }
 
     // Record the at-bat
     const { data: newAtBat } = await supabase
