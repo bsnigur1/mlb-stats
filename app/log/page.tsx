@@ -81,7 +81,7 @@ function StartGameContent() {
   // H2H quick log state
   const [h2hPlayer1, setH2hPlayer1] = useState<string | null>(null);
   const [h2hPlayer2, setH2hPlayer2] = useState<string | null>(null);
-  const [h2hDifficulty, setH2hDifficulty] = useState<'rookie' | 'minors' | 'pro' | 'all-star' | 'hall-of-fame'>('pro');
+  const [h2hDifficulty, setH2hDifficulty] = useState<'rookie' | 'veteran' | 'all-star' | 'hall-of-fame' | 'legend'>('all-star');
   const [h2hInnings, setH2hInnings] = useState('9');
   const [h2hPlayer1Score, setH2hPlayer1Score] = useState('');
   const [h2hPlayer2Score, setH2hPlayer2Score] = useState('');
