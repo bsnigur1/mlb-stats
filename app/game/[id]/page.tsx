@@ -476,6 +476,37 @@ export default function GamePage() {
         .eq('id', gameId);
 
       setGame({ ...game, current_outs: newOuts, current_inning: newInning });
+
+      // Update pitcher's outs_recorded (for IP calculation)
+      if (currentPitcherId) {
+        const { data: existingStats } = await supabase
+          .from('pitching_stats')
+          .select('*')
+          .eq('game_id', gameId)
+          .eq('player_id', currentPitcherId)
+          .single();
+
+        if (existingStats) {
+          await supabase
+            .from('pitching_stats')
+            .update({ outs_recorded: existingStats.outs_recorded + 1 })
+            .eq('id', existingStats.id);
+        } else {
+          await supabase.from('pitching_stats').insert({
+            game_id: gameId,
+            player_id: currentPitcherId,
+            outs_recorded: 1,
+          });
+        }
+
+        // Update local stats
+        const newPitchingStats = { ...pitchingStats };
+        if (!newPitchingStats[currentPitcherId]) {
+          newPitchingStats[currentPitcherId] = { outs: 0, k: 0, bb: 0, h: 0, er: 0 };
+        }
+        newPitchingStats[currentPitcherId].outs += 1;
+        setPitchingStats(newPitchingStats);
+      }
     } else if (action === 'advance' && targetBase) {
       // Move runner to target base (if not occupied)
       const targetOccupied = baserunners.some(r => r.base === targetBase);
