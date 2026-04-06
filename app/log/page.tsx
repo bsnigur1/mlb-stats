@@ -537,7 +537,7 @@ function StartGameContent() {
                 Difficulty
               </label>
               <div className="flex gap-2 flex-wrap">
-                {(['rookie', 'minors', 'pro', 'all-star', 'hall-of-fame'] as const).map((diff) => (
+                {(['rookie', 'veteran', 'all-star', 'hall-of-fame', 'legend'] as const).map((diff) => (
                   <motion.button
                     key={diff}
                     whileTap={{ scale: 0.95 }}
