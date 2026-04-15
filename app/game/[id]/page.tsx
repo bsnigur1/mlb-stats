@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Undo2, Flag, Circle, X, AlertTriangle, Timer } from 'lucide-react';
@@ -138,9 +138,8 @@ export default function GamePage() {
   const [inningsPlayed, setInningsPlayed] = useState('');
   const [ending, setEnding] = useState(false);
 
-  // Game timer
+  // Game timer - synced to game's created_at
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Leave game modal state
   const [showLeaveModal, setShowLeaveModal] = useState(false);
@@ -260,18 +259,21 @@ export default function GamePage() {
     loadGame();
   }, [loadGame]);
 
-  // Game timer - starts when component mounts
+  // Game timer - synced to game's created_at timestamp
   useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
-    }, 1000);
+    if (!game?.created_at) return;
 
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+    const updateTimer = () => {
+      const startTime = new Date(game.created_at).getTime();
+      const now = Date.now();
+      setElapsedSeconds(Math.floor((now - startTime) / 1000));
     };
-  }, []);
+
+    updateTimer(); // Initial update
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [game?.created_at]);
 
   // Separate effect for realtime subscriptions - only depends on gameId
   useEffect(() => {

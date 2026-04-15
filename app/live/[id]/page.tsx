@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Circle, Radio, Users, Timer } from 'lucide-react';
@@ -59,9 +59,8 @@ export default function LiveGamePage() {
   const [pitchingStats, setPitchingStats] = useState<Record<string, { outs: number; k: number; bb: number; h: number; er: number }>>({});
   const [loading, setLoading] = useState(true);
 
-  // Game timer
+  // Game timer - synced to game's created_at
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Calculate current batter index
   const calculateCurrentBatter = useCallback((atBatsData: AtBat[], gameData: Game | null, numPlayers: number) => {
@@ -137,18 +136,21 @@ export default function LiveGamePage() {
     setLoading(false);
   }, [gameId, router]);
 
-  // Game timer - starts when component mounts
+  // Game timer - synced to game's created_at timestamp
   useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
-    }, 1000);
+    if (!game?.created_at) return;
 
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+    const updateTimer = () => {
+      const startTime = new Date(game.created_at).getTime();
+      const now = Date.now();
+      setElapsedSeconds(Math.floor((now - startTime) / 1000));
     };
-  }, []);
+
+    updateTimer(); // Initial update
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [game?.created_at]);
 
   useEffect(() => {
     loadGame();
