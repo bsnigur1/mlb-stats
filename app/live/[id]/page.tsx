@@ -1,9 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Circle, Radio, Users } from 'lucide-react';
+import { ArrowLeft, Circle, Radio, Users, Timer } from 'lucide-react';
+
+// Format elapsed seconds as mm:ss or h:mm:ss
+function formatGameTime(seconds: number): string {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { Player, Game, GamePlayer, AtBat } from '@/lib/types';
@@ -46,6 +58,10 @@ export default function LiveGamePage() {
   const [atBats, setAtBats] = useState<AtBat[]>([]);
   const [pitchingStats, setPitchingStats] = useState<Record<string, { outs: number; k: number; bb: number; h: number; er: number }>>({});
   const [loading, setLoading] = useState(true);
+
+  // Game timer
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Calculate current batter index
   const calculateCurrentBatter = useCallback((atBatsData: AtBat[], gameData: Game | null, numPlayers: number) => {
@@ -120,6 +136,19 @@ export default function LiveGamePage() {
 
     setLoading(false);
   }, [gameId, router]);
+
+  // Game timer - starts when component mounts
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     loadGame();
@@ -261,6 +290,14 @@ export default function LiveGamePage() {
           <div className="text-[11px] text-[#4A5772]">
             Inning {game.current_inning} · Spectator Mode
           </div>
+        </div>
+
+        {/* Game timer */}
+        <div className="flex items-center gap-1.5 mr-3">
+          <Timer size={12} color="#4A5772" />
+          <span className="text-sm font-mono text-[#8A9BBB] tabular-nums">
+            {formatGameTime(elapsedSeconds)}
+          </span>
         </div>
 
         {/* Outs indicator */}

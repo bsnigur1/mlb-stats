@@ -1,9 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Undo2, Flag, Circle, X, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Undo2, Flag, Circle, X, AlertTriangle, Timer } from 'lucide-react';
+
+// Format elapsed seconds as mm:ss or h:mm:ss
+function formatGameTime(seconds: number): string {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 import { supabase } from '@/lib/supabase';
 import { AtBatResult, Player, Game, GamePlayer, AtBat, Baserunner } from '@/lib/types';
 import { calculateStats, formatAvg } from '@/lib/stats';
@@ -126,6 +138,10 @@ export default function GamePage() {
   const [inningsPlayed, setInningsPlayed] = useState('');
   const [ending, setEnding] = useState(false);
 
+  // Game timer
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
   // Leave game modal state
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -243,6 +259,19 @@ export default function GamePage() {
   useEffect(() => {
     loadGame();
   }, [loadGame]);
+
+  // Game timer - starts when component mounts
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
 
   // Separate effect for realtime subscriptions - only depends on gameId
   useEffect(() => {
@@ -1267,6 +1296,13 @@ export default function GamePage() {
               </div>
             </div>
 
+            {/* Game duration */}
+            <div className="flex items-center justify-center gap-2 py-3 mb-4 rounded-lg" style={{ background: '#162035' }}>
+              <Timer size={14} color="#4A5772" />
+              <span className="text-sm text-[#8A9BBB]">Game time:</span>
+              <span className="font-mono font-semibold text-[#EFF2FF]">{formatGameTime(elapsedSeconds)}</span>
+            </div>
+
             <div className="flex gap-3">
               <motion.button
                 whileTap={{ scale: 0.97 }}
@@ -1340,6 +1376,14 @@ export default function GamePage() {
             </button>
           </div>
         )}
+
+        {/* Game timer */}
+        <div className="flex items-center gap-1.5 mr-3">
+          <Timer size={12} color="#4A5772" />
+          <span className="text-sm font-mono text-[#8A9BBB] tabular-nums">
+            {formatGameTime(elapsedSeconds)}
+          </span>
+        </div>
 
         {/* Outs indicator in header */}
         <div className="flex items-center gap-2">
