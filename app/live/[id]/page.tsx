@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Circle, Radio, Users, Timer } from 'lucide-react';
+import { ArrowLeft, Circle, Radio, Users, Timer, Trophy } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 
 // Format elapsed seconds as mm:ss or h:mm:ss
 function formatGameTime(seconds: number): string {
@@ -20,6 +21,71 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { Player, Game, GamePlayer, AtBat } from '@/lib/types';
 import { calculateStats, formatAvg } from '@/lib/stats';
+
+// Milestone thresholds
+const MILESTONES = {
+  rbi: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+  hr: [50, 100, 200, 300, 400, 500, 600, 700, 750, 800, 900, 1000],
+  hits: [100, 500, 1000, 1500, 2000, 2500, 3000],
+  k: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+  pitching_k: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+};
+
+interface MilestoneAlert {
+  playerName: string;
+  stat: string;
+  value: number;
+  isSeason?: boolean;
+}
+
+// Milestone celebration popup
+function MilestoneCelebration({ milestone, onClose }: { milestone: MilestoneAlert; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8, y: 50 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.8, y: 50 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/70" />
+      <motion.div
+        initial={{ rotate: -5 }}
+        animate={{ rotate: [-5, 5, -5, 5, 0] }}
+        transition={{ duration: 0.5 }}
+        className="relative p-8 rounded-2xl text-center"
+        style={{
+          background: 'linear-gradient(135deg, rgba(240,180,41,0.2) 0%, rgba(240,180,41,0.05) 100%)',
+          border: '2px solid #F0B429',
+          boxShadow: '0 0 60px rgba(240,180,41,0.3)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <motion.div
+          animate={{ scale: [1, 1.2, 1] }}
+          transition={{ duration: 0.5, repeat: 3 }}
+        >
+          <Trophy size={64} color="#F0B429" className="mx-auto mb-4" />
+        </motion.div>
+        <div className="text-[#F0B429] text-sm font-semibold uppercase tracking-widest mb-2">
+          Milestone!
+        </div>
+        <div className="text-3xl font-bold text-[#EFF2FF] mb-2">
+          {milestone.playerName}'s
+        </div>
+        <div className="text-4xl font-bold text-[#F0B429]">
+          {milestone.value}{milestone.value === 1 ? 'st' : milestone.value === 2 ? 'nd' : milestone.value === 3 ? 'rd' : 'th'} {milestone.stat} {milestone.isSeason ? 'This Season' : 'Career'}
+        </div>
+        <div className="text-sm text-[#4A5772] mt-4">Tap to dismiss</div>
+      </motion.div>
+    </motion.div>
+  );
+}
 
 // Animation variants
 const fadeUp = {
@@ -58,6 +124,121 @@ export default function LiveGamePage() {
   const [atBats, setAtBats] = useState<AtBat[]>([]);
   const [pitchingStats, setPitchingStats] = useState<Record<string, { outs: number; k: number; bb: number; h: number; er: number }>>({});
   const [loading, setLoading] = useState(true);
+  const [careerStats, setCareerStats] = useState<Record<string, { hr: number; rbi: number; hits: number; k: number }>>({});
+  const [seasonStats, setSeasonStats] = useState<Record<string, { hr: number; rbi: number; hits: number; k: number }>>({});
+  const [careerPitchingK, setCareerPitchingK] = useState<Record<string, number>>({});
+  const [seasonPitchingK, setSeasonPitchingK] = useState<Record<string, number>>({});
+  const [milestoneAlert, setMilestoneAlert] = useState<MilestoneAlert | null>(null);
+
+  // Track previous atBats count for milestone detection
+  const prevAtBatsCount = useRef(0);
+  // Track previous pitching K's for milestone detection
+  const prevPitchingK = useRef<Record<string, number>>({});
+
+  // Check for milestones when atBats changes
+  useEffect(() => {
+    if (atBats.length > prevAtBatsCount.current && gamePlayers.length > 0 && Object.keys(careerStats).length > 0) {
+      const newAtBat = atBats[atBats.length - 1];
+      const playerId = newAtBat.player_id;
+      const player = gamePlayers.find(gp => gp.player_id === playerId);
+
+      if (player && careerStats[playerId]) {
+        const career = careerStats[playerId];
+        const season = seasonStats[playerId] || { hr: 0, rbi: 0, hits: 0, k: 0 };
+        const gameHr = atBats.filter(ab => ab.player_id === playerId && ab.result === 'homerun').length;
+        const gameRbi = atBats.filter(ab => ab.player_id === playerId).reduce((sum, ab) => sum + (ab.rbi || 0), 0);
+        const gameHits = atBats.filter(ab => ab.player_id === playerId && ['single', 'double', 'triple', 'homerun'].includes(ab.result)).length;
+        const gameK = atBats.filter(ab => ab.player_id === playerId && ab.result === 'strikeout').length;
+
+        const totalHr = career.hr + gameHr;
+        const totalRbi = career.rbi + gameRbi;
+        const totalHits = career.hits + gameHits;
+        const totalK = career.k + gameK;
+
+        const seasonTotalHr = season.hr + gameHr;
+        const seasonTotalRbi = season.rbi + gameRbi;
+        const seasonTotalHits = season.hits + gameHits;
+        const seasonTotalK = season.k + gameK;
+
+        let milestoneTriggered = false;
+
+        // Career milestones
+        if (newAtBat.result === 'homerun' && MILESTONES.hr.includes(totalHr)) {
+          setMilestoneAlert({ playerName: player.player.name, stat: 'Homerun', value: totalHr, isSeason: false });
+          milestoneTriggered = true;
+        } else if ((newAtBat.rbi || 0) > 0 && !milestoneTriggered) {
+          const prevRbi = totalRbi - (newAtBat.rbi || 0);
+          const crossedMilestone = MILESTONES.rbi.find(m => prevRbi < m && totalRbi >= m);
+          if (crossedMilestone) {
+            setMilestoneAlert({ playerName: player.player.name, stat: 'RBI', value: crossedMilestone, isSeason: false });
+            milestoneTriggered = true;
+          }
+        }
+        if (['single', 'double', 'triple', 'homerun'].includes(newAtBat.result) && MILESTONES.hits.includes(totalHits) && !milestoneTriggered) {
+          setMilestoneAlert({ playerName: player.player.name, stat: 'Hit', value: totalHits, isSeason: false });
+          milestoneTriggered = true;
+        }
+        if (newAtBat.result === 'strikeout' && MILESTONES.k.includes(totalK) && !milestoneTriggered) {
+          setMilestoneAlert({ playerName: player.player.name, stat: 'Strikeout', value: totalK, isSeason: false });
+          milestoneTriggered = true;
+        }
+
+        // Season milestones (only if no career milestone was triggered)
+        if (!milestoneTriggered) {
+          if (newAtBat.result === 'homerun' && MILESTONES.hr.includes(seasonTotalHr)) {
+            setMilestoneAlert({ playerName: player.player.name, stat: 'Homerun', value: seasonTotalHr, isSeason: true });
+          } else if ((newAtBat.rbi || 0) > 0) {
+            const prevSeasonRbi = seasonTotalRbi - (newAtBat.rbi || 0);
+            const crossedSeasonMilestone = MILESTONES.rbi.find(m => prevSeasonRbi < m && seasonTotalRbi >= m);
+            if (crossedSeasonMilestone) {
+              setMilestoneAlert({ playerName: player.player.name, stat: 'RBI', value: crossedSeasonMilestone, isSeason: true });
+            }
+          }
+          if (['single', 'double', 'triple', 'homerun'].includes(newAtBat.result) && MILESTONES.hits.includes(seasonTotalHits)) {
+            setMilestoneAlert({ playerName: player.player.name, stat: 'Hit', value: seasonTotalHits, isSeason: true });
+          }
+          if (newAtBat.result === 'strikeout' && MILESTONES.k.includes(seasonTotalK)) {
+            setMilestoneAlert({ playerName: player.player.name, stat: 'Strikeout', value: seasonTotalK, isSeason: true });
+          }
+        }
+      }
+    }
+    prevAtBatsCount.current = atBats.length;
+  }, [atBats, gamePlayers, careerStats, seasonStats]);
+
+  // Check for pitching K milestones when pitchingStats changes
+  useEffect(() => {
+    if (Object.keys(pitchingStats).length === 0 || gamePlayers.length === 0) return;
+
+    for (const playerId of Object.keys(pitchingStats)) {
+      const currentK = pitchingStats[playerId]?.k || 0;
+      const prevK = prevPitchingK.current[playerId] || 0;
+
+      if (currentK > prevK) {
+        const player = gamePlayers.find(gp => gp.player_id === playerId);
+        if (player) {
+          const playerName = player.player.name;
+          const careerK = (careerPitchingK[playerId] || 0) + currentK;
+          const seasonK = (seasonPitchingK[playerId] || 0) + currentK;
+
+          // Check career milestone first
+          if (MILESTONES.pitching_k.includes(careerK)) {
+            setMilestoneAlert({ playerName, stat: 'Pitching K', value: careerK, isSeason: false });
+          } else if (MILESTONES.pitching_k.includes(seasonK)) {
+            // Check season milestone
+            setMilestoneAlert({ playerName, stat: 'Pitching K', value: seasonK, isSeason: true });
+          }
+        }
+      }
+    }
+
+    // Update previous pitching K tracking
+    const newPrevK: Record<string, number> = {};
+    for (const playerId of Object.keys(pitchingStats)) {
+      newPrevK[playerId] = pitchingStats[playerId]?.k || 0;
+    }
+    prevPitchingK.current = newPrevK;
+  }, [pitchingStats, gamePlayers, careerPitchingK, seasonPitchingK]);
 
   // Game timer - synced to game's created_at
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -104,6 +285,133 @@ export default function LiveGamePage() {
       .order('batting_order');
 
     setGamePlayers(gamePlayersData || []);
+
+    // Load career stats for milestone tracking (excluding this game)
+    if (gamePlayersData && gamePlayersData.length > 0) {
+      const playerIds = gamePlayersData.map((gp: GamePlayer) => gp.player_id);
+
+      // Fetch all career at-bats with pagination (may be more than 1000)
+      let allCareerAtBats: AtBat[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data: batch } = await supabase
+          .from('at_bats')
+          .select('*')
+          .in('player_id', playerIds)
+          .neq('game_id', gameId)
+          .range(offset, offset + batchSize - 1);
+        if (!batch || batch.length === 0) break;
+        allCareerAtBats = [...allCareerAtBats, ...batch];
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
+
+      const stats: Record<string, { hr: number; rbi: number; hits: number; k: number }> = {};
+      playerIds.forEach((pid: string) => {
+        const playerAbs = allCareerAtBats.filter((ab: AtBat) => ab.player_id === pid);
+        const hr = playerAbs.filter((ab: AtBat) => ab.result === 'homerun').length;
+        const rbi = playerAbs.reduce((sum: number, ab: AtBat) => sum + (ab.rbi || 0), 0);
+        const hits = playerAbs.filter((ab: AtBat) => ['single', 'double', 'triple', 'homerun'].includes(ab.result)).length;
+        const k = playerAbs.filter((ab: AtBat) => ab.result === 'strikeout').length;
+        stats[pid] = { hr, rbi, hits, k };
+      });
+      setCareerStats(stats);
+
+      // Load season stats (same season, excluding this game)
+      if (gameData.season_id) {
+        // First get all game IDs in this season (excluding current game)
+        const { data: seasonGames } = await supabase
+          .from('games')
+          .select('id')
+          .eq('season_id', gameData.season_id)
+          .neq('id', gameId);
+
+        const seasonGameIds = seasonGames?.map(g => g.id) || [];
+
+        if (seasonGameIds.length > 0) {
+          // Fetch season at-bats with pagination
+          let allSeasonAtBats: AtBat[] = [];
+          let seasonOffset = 0;
+          while (true) {
+            const { data: batch } = await supabase
+              .from('at_bats')
+              .select('*')
+              .in('player_id', playerIds)
+              .in('game_id', seasonGameIds)
+              .range(seasonOffset, seasonOffset + batchSize - 1);
+            if (!batch || batch.length === 0) break;
+            allSeasonAtBats = [...allSeasonAtBats, ...batch];
+            if (batch.length < batchSize) break;
+            seasonOffset += batchSize;
+          }
+
+          const sStats: Record<string, { hr: number; rbi: number; hits: number; k: number }> = {};
+          playerIds.forEach((pid: string) => {
+            const playerAbs = allSeasonAtBats.filter((ab: AtBat) => ab.player_id === pid);
+            const hr = playerAbs.filter((ab: AtBat) => ab.result === 'homerun').length;
+            const rbi = playerAbs.reduce((sum: number, ab: AtBat) => sum + (ab.rbi || 0), 0);
+            const hits = playerAbs.filter((ab: AtBat) => ['single', 'double', 'triple', 'homerun'].includes(ab.result)).length;
+            const k = playerAbs.filter((ab: AtBat) => ab.result === 'strikeout').length;
+            sStats[pid] = { hr, rbi, hits, k };
+          });
+          setSeasonStats(sStats);
+        } else {
+          // No other games in season yet
+          const emptyStats: Record<string, { hr: number; rbi: number; hits: number; k: number }> = {};
+          playerIds.forEach((pid: string) => {
+            emptyStats[pid] = { hr: 0, rbi: 0, hits: 0, k: 0 };
+          });
+          setSeasonStats(emptyStats);
+        }
+      }
+
+      // Load career pitching K stats (excluding this game)
+      const { data: careerPitchingData } = await supabase
+        .from('pitching_stats')
+        .select('player_id, strikeouts')
+        .in('player_id', playerIds)
+        .neq('game_id', gameId);
+
+      const careerPK: Record<string, number> = {};
+      playerIds.forEach((pid: string) => {
+        const playerPitching = careerPitchingData?.filter(ps => ps.player_id === pid) || [];
+        careerPK[pid] = playerPitching.reduce((sum, ps) => sum + (ps.strikeouts || 0), 0);
+      });
+      setCareerPitchingK(careerPK);
+
+      // Load season pitching K stats (same season, excluding this game)
+      if (gameData.season_id) {
+        const { data: seasonGamesForPitching } = await supabase
+          .from('games')
+          .select('id')
+          .eq('season_id', gameData.season_id)
+          .neq('id', gameId);
+
+        const seasonGameIdsForPitching = seasonGamesForPitching?.map(g => g.id) || [];
+
+        if (seasonGameIdsForPitching.length > 0) {
+          const { data: seasonPitchingData } = await supabase
+            .from('pitching_stats')
+            .select('player_id, strikeouts')
+            .in('player_id', playerIds)
+            .in('game_id', seasonGameIdsForPitching);
+
+          const seasonPK: Record<string, number> = {};
+          playerIds.forEach((pid: string) => {
+            const playerPitching = seasonPitchingData?.filter(ps => ps.player_id === pid) || [];
+            seasonPK[pid] = playerPitching.reduce((sum, ps) => sum + (ps.strikeouts || 0), 0);
+          });
+          setSeasonPitchingK(seasonPK);
+        } else {
+          const emptyPK: Record<string, number> = {};
+          playerIds.forEach((pid: string) => {
+            emptyPK[pid] = 0;
+          });
+          setSeasonPitchingK(emptyPK);
+        }
+      }
+    }
 
     const { data: atBatsData } = await supabase
       .from('at_bats')
@@ -186,7 +494,8 @@ export default function LiveGamePage() {
           filter: `game_id=eq.${gameId}`,
         },
         (payload) => {
-          setAtBats((prev) => [...prev, payload.new as AtBat]);
+          const newAtBat = payload.new as AtBat;
+          setAtBats((prev) => [...prev, newAtBat]);
         }
       )
       .on(
@@ -515,6 +824,16 @@ export default function LiveGamePage() {
           You&apos;re watching this game live. Stats update automatically.
         </div>
       </div>
+
+      {/* Milestone Celebration */}
+      <AnimatePresence>
+        {milestoneAlert && (
+          <MilestoneCelebration
+            milestone={milestoneAlert}
+            onClose={() => setMilestoneAlert(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

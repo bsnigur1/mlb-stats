@@ -457,7 +457,6 @@ export default function PlayerModal({ playerId, onClose }: PlayerModalProps) {
                 <thead>
                   <tr style={{ background: '#0F1829' }}>
                     <th className="px-4 py-3 text-left text-[11px] text-[#4A5772] uppercase tracking-wider font-semibold">Season</th>
-                    <th className="px-3 py-3 text-right text-[11px] text-[#4A5772] uppercase tracking-wider font-semibold">G</th>
                     <th className="px-3 py-3 text-right text-[11px] text-[#4A5772] uppercase tracking-wider font-semibold">AB</th>
                     <th className="px-3 py-3 text-right text-[11px] text-[#4A5772] uppercase tracking-wider font-semibold">H</th>
                     <th className="px-3 py-3 text-right text-[11px] text-[#4A5772] uppercase tracking-wider font-semibold">2B</th>
@@ -475,7 +474,6 @@ export default function PlayerModal({ playerId, onClose }: PlayerModalProps) {
                   {seasonRows.map((row) => (
                     <tr key={row.season.id} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                       <td className="px-4 py-3 text-sm font-medium text-[#EFF2FF]">{row.season.year}</td>
-                      <td className="px-3 py-3 text-sm text-[#8A9BBB] text-right tabular-nums">{row.gamesPlayed}</td>
                       <td className="px-3 py-3 text-sm text-[#8A9BBB] text-right tabular-nums">{row.batting.ab}</td>
                       <td className="px-3 py-3 text-sm text-[#8A9BBB] text-right tabular-nums">{row.batting.hits}</td>
                       <td className="px-3 py-3 text-sm text-[#8A9BBB] text-right tabular-nums">{row.batting.doubles}</td>
@@ -492,7 +490,6 @@ export default function PlayerModal({ playerId, onClose }: PlayerModalProps) {
                   {/* Career row */}
                   <tr style={{ borderTop: '2px solid rgba(255,255,255,0.15)', background: '#0F1829' }}>
                     <td className="px-4 py-3 text-sm font-bold text-[#EFF2FF]">Career</td>
-                    <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums font-semibold">{careerStats.gamesPlayed}</td>
                     <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums font-semibold">{careerStats.batting.ab}</td>
                     <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums font-semibold">{careerStats.batting.hits}</td>
                     <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums font-semibold">{careerStats.batting.doubles}</td>

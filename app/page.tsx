@@ -23,6 +23,42 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Player, Session, Game, GamePlayer, AtBat, HotStreak, Season } from '@/lib/types';
 import { calculateHotStreaks, formatHotStreak } from '@/lib/hot-streaks';
+import { Target } from 'lucide-react';
+
+// Milestone thresholds
+const MILESTONES = {
+  rbi: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+  hr: [50, 100, 200, 300, 400, 500, 600, 700, 750, 800, 900, 1000],
+  hits: [100, 500, 1000, 1500, 2000, 2500, 3000],
+  k: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+  pitching_k: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+};
+
+// Proximity thresholds for showing milestones on dashboard
+const MILESTONE_PROXIMITY = {
+  rbi: 8,
+  hr: 5,
+  hits: 10,
+  k: 8,
+  pitching_k: 8,
+};
+
+function getNextMilestone(current: number, milestones: number[]): number | null {
+  for (const m of milestones) {
+    if (current < m) return m;
+  }
+  return null;
+}
+
+interface PlayerMilestone {
+  player: Player;
+  stat: string;
+  current: number;
+  target: number;
+  remaining: number;
+  label: string;
+  isSeason?: boolean;
+}
 
 // Animation variants
 const fadeUp = {
@@ -413,6 +449,7 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [atBats, setAtBats] = useState<AtBat[]>([]);
+  const [pitchingStatsData, setPitchingStatsData] = useState<{ player_id: string; game_id: string; strikeouts: number }[]>([]);
   const [season2026, setSeason2026] = useState<Season | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -440,10 +477,25 @@ export default function Dashboard() {
         offset += batchSize;
       }
 
+      // Fetch all pitching stats
+      let allPitchingStats: { player_id: string; game_id: string; strikeouts: number }[] = [];
+      let pitchingOffset = 0;
+      while (true) {
+        const { data: batch } = await supabase
+          .from('pitching_stats')
+          .select('player_id, game_id, strikeouts')
+          .range(pitchingOffset, pitchingOffset + batchSize - 1);
+        if (!batch || batch.length === 0) break;
+        allPitchingStats = [...allPitchingStats, ...batch];
+        if (batch.length < batchSize) break;
+        pitchingOffset += batchSize;
+      }
+
       setPlayers(playersRes.data || []);
       setSessions(sessionsRes.data || []);
       setGames(gamesRes.data || []);
       setAtBats(allAtBats);
+      setPitchingStatsData(allPitchingStats);
       setSeason2026(seasonsRes.data || null);
       setLoading(false);
     }
@@ -530,6 +582,113 @@ export default function Dashboard() {
   const leader = sortedByAvg[0];
   const hrLeader = sortedByHr[0];
   const rbiLeader = sortedByRbi[0];
+
+  // Calculate career stats for milestones (all time, not just 2026)
+  const careerStats = players.map((player) => {
+    const playerAtBats = atBats.filter((ab) => ab.player_id === player.id);
+    const singles = playerAtBats.filter((ab) => ab.result === 'single').length;
+    const doubles = playerAtBats.filter((ab) => ab.result === 'double').length;
+    const triples = playerAtBats.filter((ab) => ab.result === 'triple').length;
+    const homeruns = playerAtBats.filter((ab) => ab.result === 'homerun').length;
+    const strikeouts = playerAtBats.filter((ab) => ab.result === 'strikeout').length;
+    const outs = playerAtBats.filter((ab) => ab.result === 'out').length;
+    const rbi = playerAtBats.reduce((sum, ab) => sum + (ab.rbi || 0), 0);
+    const hits = singles + doubles + triples + homeruns;
+    const ab = hits + strikeouts + outs;
+    return { player, hits, homeruns, rbi, strikeouts, ab };
+  });
+
+  // Calculate season stats for milestones (2026 only)
+  const seasonStatsForMilestones = players.map((player) => {
+    const playerAtBats = season2026AtBats.filter((ab) => ab.player_id === player.id);
+    const singles = playerAtBats.filter((ab) => ab.result === 'single').length;
+    const doubles = playerAtBats.filter((ab) => ab.result === 'double').length;
+    const triples = playerAtBats.filter((ab) => ab.result === 'triple').length;
+    const homeruns = playerAtBats.filter((ab) => ab.result === 'homerun').length;
+    const strikeouts = playerAtBats.filter((ab) => ab.result === 'strikeout').length;
+    const rbi = playerAtBats.reduce((sum, ab) => sum + (ab.rbi || 0), 0);
+    const hits = singles + doubles + triples + homeruns;
+    return { player, hits, homeruns, rbi, strikeouts };
+  });
+
+  // Calculate career pitching strikeouts
+  const careerPitchingStats = players.map((player) => {
+    const playerPitching = pitchingStatsData.filter((ps) => ps.player_id === player.id);
+    const pitchingK = playerPitching.reduce((sum, ps) => sum + (ps.strikeouts || 0), 0);
+    return { player, pitchingK };
+  });
+
+  // Calculate season pitching strikeouts (2026 only)
+  const season2026GameIdSet = new Set(season2026Games.map(g => g.id));
+  const seasonPitchingStats = players.map((player) => {
+    const playerPitching = pitchingStatsData.filter((ps) => ps.player_id === player.id && season2026GameIdSet.has(ps.game_id));
+    const pitchingK = playerPitching.reduce((sum, ps) => sum + (ps.strikeouts || 0), 0);
+    return { player, pitchingK };
+  });
+
+  // Calculate milestones for each player (only if close enough)
+  const milestones: PlayerMilestone[] = [];
+
+  // Career milestones (batting)
+  careerStats.forEach(({ player, hits, homeruns, rbi, strikeouts }) => {
+    const rbiTarget = getNextMilestone(rbi, MILESTONES.rbi);
+    if (rbiTarget && rbiTarget - rbi <= MILESTONE_PROXIMITY.rbi) {
+      milestones.push({ player, stat: 'rbi', current: rbi, target: rbiTarget, remaining: rbiTarget - rbi, label: 'RBI', isSeason: false });
+    }
+    const hrTarget = getNextMilestone(homeruns, MILESTONES.hr);
+    if (hrTarget && hrTarget - homeruns <= MILESTONE_PROXIMITY.hr) {
+      milestones.push({ player, stat: 'hr', current: homeruns, target: hrTarget, remaining: hrTarget - homeruns, label: 'HR', isSeason: false });
+    }
+    const hitsTarget = getNextMilestone(hits, MILESTONES.hits);
+    if (hitsTarget && hitsTarget - hits <= MILESTONE_PROXIMITY.hits) {
+      milestones.push({ player, stat: 'hits', current: hits, target: hitsTarget, remaining: hitsTarget - hits, label: 'Hits', isSeason: false });
+    }
+    const kTarget = getNextMilestone(strikeouts, MILESTONES.k);
+    if (kTarget && kTarget - strikeouts <= MILESTONE_PROXIMITY.k) {
+      milestones.push({ player, stat: 'k', current: strikeouts, target: kTarget, remaining: kTarget - strikeouts, label: 'K', isSeason: false });
+    }
+  });
+
+  // Career milestones (pitching)
+  careerPitchingStats.forEach(({ player, pitchingK }) => {
+    const pitchingKTarget = getNextMilestone(pitchingK, MILESTONES.pitching_k);
+    if (pitchingKTarget && pitchingKTarget - pitchingK <= MILESTONE_PROXIMITY.pitching_k) {
+      milestones.push({ player, stat: 'pitching_k', current: pitchingK, target: pitchingKTarget, remaining: pitchingKTarget - pitchingK, label: 'Pitching K', isSeason: false });
+    }
+  });
+
+  // Season milestones (batting)
+  seasonStatsForMilestones.forEach(({ player, hits, homeruns, rbi, strikeouts }) => {
+    const rbiTarget = getNextMilestone(rbi, MILESTONES.rbi);
+    if (rbiTarget && rbiTarget - rbi <= MILESTONE_PROXIMITY.rbi) {
+      milestones.push({ player, stat: 'rbi', current: rbi, target: rbiTarget, remaining: rbiTarget - rbi, label: 'RBI', isSeason: true });
+    }
+    const hrTarget = getNextMilestone(homeruns, MILESTONES.hr);
+    if (hrTarget && hrTarget - homeruns <= MILESTONE_PROXIMITY.hr) {
+      milestones.push({ player, stat: 'hr', current: homeruns, target: hrTarget, remaining: hrTarget - homeruns, label: 'HR', isSeason: true });
+    }
+    const hitsTarget = getNextMilestone(hits, MILESTONES.hits);
+    if (hitsTarget && hitsTarget - hits <= MILESTONE_PROXIMITY.hits) {
+      milestones.push({ player, stat: 'hits', current: hits, target: hitsTarget, remaining: hitsTarget - hits, label: 'Hits', isSeason: true });
+    }
+    const kTarget = getNextMilestone(strikeouts, MILESTONES.k);
+    if (kTarget && kTarget - strikeouts <= MILESTONE_PROXIMITY.k) {
+      milestones.push({ player, stat: 'k', current: strikeouts, target: kTarget, remaining: kTarget - strikeouts, label: 'K', isSeason: true });
+    }
+  });
+
+  // Season milestones (pitching)
+  seasonPitchingStats.forEach(({ player, pitchingK }) => {
+    const pitchingKTarget = getNextMilestone(pitchingK, MILESTONES.pitching_k);
+    if (pitchingKTarget && pitchingKTarget - pitchingK <= MILESTONE_PROXIMITY.pitching_k) {
+      milestones.push({ player, stat: 'pitching_k', current: pitchingK, target: pitchingKTarget, remaining: pitchingKTarget - pitchingK, label: 'Pitching K', isSeason: true });
+    }
+  });
+
+  // Sort by closest and limit to 4 total milestones
+  const closestMilestones = milestones
+    .sort((a, b) => a.remaining - b.remaining)
+    .slice(0, 4);
 
   if (loading) {
     return (
@@ -670,6 +829,49 @@ export default function Dashboard() {
                 View all sessions <ChevronRight size={13} />
               </motion.div>
             </Link>
+
+            {/* Milestone Watch */}
+            {closestMilestones.length > 0 && (
+              <div className="mt-6">
+                <div className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                  <Target size={11} color="#60A5FA" />
+                  Milestones
+                </div>
+                <div className="flex gap-3 flex-wrap">
+                  {closestMilestones.map((m, i) => (
+                    <motion.div
+                      key={`${m.player.id}-${m.stat}-${m.isSeason ? 'season' : 'career'}`}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="flex-1 min-w-[160px] p-3 rounded-lg"
+                      style={{
+                        background: '#0F1829',
+                        border: m.isSeason ? '1px solid rgba(240,180,41,0.15)' : '1px solid rgba(96,165,250,0.15)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-[#EFF2FF]">{m.player.name}</span>
+                        <span className="text-[10px] text-[#4A5772] uppercase">{m.isSeason ? 'Season' : 'Career'} {m.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: m.isSeason ? 'rgba(240,180,41,0.1)' : 'rgba(96,165,250,0.1)' }}>
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${(m.current / m.target) * 100}%`,
+                              background: m.isSeason ? 'linear-gradient(90deg, #F0B429 0%, #D97706 100%)' : 'linear-gradient(90deg, #60A5FA 0%, #3B82F6 100%)',
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-[#EFF2FF] tabular-nums">{m.target}</span>
+                      </div>
+                      <div className={`text-xs font-semibold mt-1 tabular-nums ${m.isSeason ? 'text-[#F0B429]' : 'text-[#60A5FA]'}`}>{m.current}</div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Player leaderboard */}
