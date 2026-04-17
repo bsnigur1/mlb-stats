@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, BarChart2, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import Link from 'next/link';
-// Note: Link is still used for the back button
 import { supabase } from '@/lib/supabase';
 import { Player, AtBat, Game, Session, Season } from '@/lib/types';
 import { filterAtBatsBySeason, countGamesInSeason } from '@/lib/stats';
+import PlayerModal from './PlayerModal';
 
 type SortKey = 'name' | 'games' | 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'h' | 'doubles' | 'triples' | 'ab' | 'bb' | 'kPercent' | 'abPerHr' | 'abPerRbi';
 type PitchingSortKey = 'name' | 'ip' | 'k' | 'bb' | 'h' | 'er' | 'era' | 'whip' | 'kPerIp';
@@ -119,6 +119,7 @@ export default function StatsPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [activeSection, setActiveSection] = useState<'2026' | '2025' | 'career'>('2026');
   const [pitchingStats, setPitchingStats] = useState<PitchingStatRow[]>([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [pitchingSortKey, setPitchingSortKey] = useState<PitchingSortKey>('era');
   const [pitchingSortDir, setPitchingSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -446,7 +447,8 @@ export default function StatsPage() {
                   variants={fadeUp}
                   initial="hidden"
                   animate="visible"
-                  className="hover:bg-white/5 transition-colors"
+                  onClick={() => setSelectedPlayerId(ps.player.id)}
+                  className="hover:bg-white/5 transition-colors cursor-pointer"
                   style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
                 >
                   <td className="px-3 py-3">
@@ -551,7 +553,8 @@ export default function StatsPage() {
                       variants={fadeUp}
                       initial="hidden"
                       animate="visible"
-                      className="hover:bg-white/5 transition-colors"
+                      onClick={() => setSelectedPlayerId(ps.player_id)}
+                      className="hover:bg-white/5 transition-colors cursor-pointer"
                       style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
                     >
                       <td className="px-3 py-3">
@@ -598,6 +601,16 @@ export default function StatsPage() {
           </div>
         )}
       </div>
+
+      {/* Player Modal */}
+      <AnimatePresence>
+        {selectedPlayerId && (
+          <PlayerModal
+            playerId={selectedPlayerId}
+            onClose={() => setSelectedPlayerId(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
