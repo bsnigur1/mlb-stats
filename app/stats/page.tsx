@@ -10,7 +10,7 @@ import { Player, AtBat, Game, Session, Season } from '@/lib/types';
 import { filterAtBatsBySeason, countGamesInSeason } from '@/lib/stats';
 
 type SortKey = 'name' | 'games' | 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'h' | 'doubles' | 'triples' | 'ab' | 'bb' | 'kPercent' | 'abPerHr' | 'abPerRbi';
-type PitchingSortKey = 'name' | 'ip' | 'k' | 'bb' | 'h' | 'er' | 'era' | 'whip';
+type PitchingSortKey = 'name' | 'ip' | 'k' | 'bb' | 'h' | 'er' | 'era' | 'whip' | 'kPerIp';
 
 interface PitchingStatRow {
   player_id: string;
@@ -255,7 +255,8 @@ export default function StatsPage() {
       const ip = ps.outs / 3;
       const era = ps.outs > 0 ? (ps.er / ps.outs) * 27 : 0;
       const whip = ps.outs > 0 ? ((ps.bb + ps.h) / ps.outs) * 3 : 0;
-      return { ...ps, ip, era, whip };
+      const kPerIp = ps.outs > 0 ? (ps.k * 3) / ps.outs : 0;
+      return { ...ps, ip, era, whip, kPerIp };
     });
 
     return withDerived.sort((a, b) => {
@@ -294,6 +295,10 @@ export default function StatsPage() {
         case 'whip':
           aVal = a.whip;
           bVal = b.whip;
+          break;
+        case 'kPerIp':
+          aVal = a.kPerIp;
+          bVal = b.kPerIp;
           break;
         default:
           aVal = 0;
@@ -514,6 +519,7 @@ export default function StatsPage() {
                     { key: 'era', label: 'ERA' },
                     { key: 'whip', label: 'WHIP' },
                     { key: 'k', label: 'K' },
+                    { key: 'kPerIp', label: 'K/IP' },
                     { key: 'bb', label: 'BB' },
                     { key: 'h', label: 'H' },
                     { key: 'er', label: 'ER' },
@@ -569,6 +575,7 @@ export default function StatsPage() {
                         {ps.whip.toFixed(2)}
                       </td>
                       <td className="px-3 py-3 text-sm text-[#22C55E] text-right tabular-nums">{ps.k}</td>
+                      <td className="px-3 py-3 text-sm text-[#60A5FA] text-right tabular-nums font-medium">{ps.kPerIp.toFixed(2)}</td>
                       <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.bb}</td>
                       <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.h}</td>
                       <td className="px-3 py-3 text-sm text-[#EFF2FF] text-right tabular-nums">{ps.er}</td>
