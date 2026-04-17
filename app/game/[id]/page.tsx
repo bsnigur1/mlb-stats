@@ -1997,6 +1997,8 @@ export default function GamePage() {
                 const ipDisplay = partialOuts > 0 ? `${innings}.${partialOuts}` : `${innings}.0`;
                 // ERA = (earned runs / outs) * 27 (for 9 innings * 3 outs)
                 const era = ps.outs > 0 ? (ps.er / ps.outs) * 27 : 0;
+                // K/IP = strikeouts per inning (K / (outs / 3))
+                const kPerInning = ps.outs > 0 ? (ps.k * 3) / ps.outs : 0;
 
                 // Only show if pitcher has recorded any stats
                 if (ps.outs === 0 && ps.k === 0 && ps.bb === 0 && ps.h === 0) return null;
@@ -2014,7 +2016,7 @@ export default function GamePage() {
                     </div>
                     <span className="text-sm text-[#8A9BBB] tabular-nums">
                       {ipDisplay} IP, {ps.k} K, {ps.bb} BB, {ps.h} H, {ps.er} ER
-                      <span className="text-[#EF4444] ml-2">({era.toFixed(2)} ERA)</span>
+                      <span className="text-[#EF4444] ml-2">({era.toFixed(2)} ERA, {kPerInning.toFixed(2)} K/IP)</span>
                     </span>
                   </div>
                 );
