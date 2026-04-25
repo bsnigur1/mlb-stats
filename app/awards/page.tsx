@@ -60,7 +60,7 @@ const MEMORABLE_MOMENTS = [
     color: '#A855F7',
   },
   {
-    id: 'immaculate-inning',
+    id: 'immaculate-inning-greg',
     title: 'Immaculate Inning',
     player: 'Greg',
     description: '9 pitches, 9 strikes',
@@ -68,6 +68,26 @@ const MEMORABLE_MOMENTS = [
     date: 'March 7, 2026',
     icon: Zap,
     color: '#22C55E',
+  },
+  {
+    id: 'immaculate-inning-bryan',
+    title: 'Immaculate Inning',
+    player: 'Bryan',
+    description: '9 pitches, 9 strikes',
+    detail: '3 strikeouts',
+    date: 'April 22, 2026',
+    icon: Zap,
+    color: '#22C55E',
+  },
+  {
+    id: 'trio-b2b2b-hrs',
+    title: 'Back-to-Back-to-Back HRs',
+    player: 'Greg, Bryan & Jack',
+    description: 'Trio goes yard',
+    detail: '3 consecutive HRs',
+    date: 'April 25, 2026',
+    icon: Zap,
+    color: '#F0B429',
   },
 ];
 
