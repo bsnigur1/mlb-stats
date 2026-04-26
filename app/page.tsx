@@ -206,9 +206,18 @@ function PlayerRow({ player, rank, index, stats, hotStreaks }: { player: Player;
 // Session card
 function SessionCard({ session, index, games }: { session: Session; index: number; games: Game[] }) {
   const [expanded, setExpanded] = useState(false);
+  const router = useRouter();
   const sessionGames = games.filter(g => g.session_id === session.id && g.game_mode !== '1v1');
   const wins = sessionGames.filter(g => g.status === 'completed' && g.score?.startsWith('W')).length;
   const losses = sessionGames.length - wins;
+
+  const handleClick = () => {
+    if (expanded) {
+      router.push(`/sessions/${session.id}`);
+    } else {
+      setExpanded(true);
+    }
+  };
 
   return (
     <motion.div
@@ -220,7 +229,7 @@ function SessionCard({ session, index, games }: { session: Session; index: numbe
       style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
     >
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleClick}
         className="w-full flex items-center gap-3 p-4 text-left"
       >
         <div className="min-w-10 text-[11px] font-medium text-[#4A5772] uppercase tracking-wide">
