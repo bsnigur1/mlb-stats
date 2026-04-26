@@ -243,8 +243,19 @@ export default function GamePage() {
     prevOuts: number;
     prevInning: number;
     statsChanges: { k: number; bb: number; h: number };
+    prevIsPitchingMode: boolean;
   };
   const [pitchingHistory, setPitchingHistory] = useState<PitchingEvent[]>([]);
+
+  // Batting event history for undo
+  type BattingEvent = {
+    atBatId: string;
+    prevOuts: number;
+    prevInning: number;
+    prevIsPitchingMode: boolean;
+    prevBatterIndex: number;
+  };
+  const [battingHistory, setBattingHistory] = useState<BattingEvent[]>([]);
 
   // Helper to calculate current batter for 1v1 based on total outs
   const calculateH2HBatterIndex = useCallback((atBatsData: AtBat[], numPlayers: number) => {
@@ -603,6 +614,15 @@ export default function GamePage() {
       .single();
 
     if (newAtBat) {
+      // Save to history for undo
+      setBattingHistory(prev => [...prev, {
+        atBatId: newAtBat.id,
+        prevOuts: game.current_outs,
+        prevInning: game.current_inning,
+        prevIsPitchingMode: isPitchingMode,
+        prevBatterIndex: currentBatterIndex,
+      }]);
+
       const updatedAtBats = [...atBats, newAtBat];
       setAtBats(updatedAtBats);
 
@@ -1204,6 +1224,7 @@ export default function GamePage() {
       prevOuts,
       prevInning,
       statsChanges,
+      prevIsPitchingMode: true,
     }]);
 
     // Update game state
@@ -1274,27 +1295,27 @@ export default function GamePage() {
   };
 
   const undoLastAtBat = async () => {
-    if (atBats.length === 0) return;
+    if (battingHistory.length === 0 || !game) return;
 
-    const lastAtBat = atBats[atBats.length - 1];
+    const lastEvent = battingHistory[battingHistory.length - 1];
 
-    await supabase.from('at_bats').delete().eq('id', lastAtBat.id);
+    // Delete the at-bat from database
+    await supabase.from('at_bats').delete().eq('id', lastEvent.atBatId);
 
-    // Recalculate game state
-    const remainingAtBats = atBats.slice(0, -1);
-    const outs = remainingAtBats.filter(
-      (ab) => ab.result === 'out' || ab.result === 'strikeout'
-    ).length;
-
-    const newInning = Math.floor(outs / 3) + 1;
-    const newOuts = outs % 3;
-
+    // Restore game state in database
     await supabase
       .from('games')
-      .update({ current_outs: newOuts, current_inning: newInning })
+      .update({ current_outs: lastEvent.prevOuts, current_inning: lastEvent.prevInning })
       .eq('id', gameId);
 
-    loadGame();
+    // Update local state
+    setAtBats(prev => prev.filter(ab => ab.id !== lastEvent.atBatId));
+    setGame({ ...game, current_outs: lastEvent.prevOuts, current_inning: lastEvent.prevInning });
+    setIsPitchingMode(lastEvent.prevIsPitchingMode);
+    setCurrentBatterIndex(lastEvent.prevBatterIndex);
+
+    // Remove from history
+    setBattingHistory(prev => prev.slice(0, -1));
   };
 
   const undoLastPitchingEvent = async () => {
@@ -1350,6 +1371,7 @@ export default function GamePage() {
     // Update local state
     setGame({ ...game, current_outs: lastEvent.prevOuts, current_inning: lastEvent.prevInning });
     setBaserunners(lastEvent.prevBaserunners);
+    setIsPitchingMode(lastEvent.prevIsPitchingMode);
 
     // Update local pitching stats
     const newPitchingStats = { ...pitchingStats };
@@ -2358,7 +2380,7 @@ export default function GamePage() {
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={isPitchingMode && game.track_pitching ? undoLastPitchingEvent : undoLastAtBat}
-            disabled={isPitchingMode && game.track_pitching ? pitchingHistory.length === 0 : atBats.length === 0}
+            disabled={isPitchingMode && game.track_pitching ? pitchingHistory.length === 0 : battingHistory.length === 0}
             className="flex-1 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
             style={{ background: '#162035', color: '#8A9BBB', border: '1px solid rgba(255,255,255,0.1)' }}
           >
