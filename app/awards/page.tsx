@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowLeft, Target, Sparkles, Zap, Trophy } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Target, Sparkles, Zap, Trophy, X } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { Award, Player } from '@/lib/types';
@@ -48,6 +48,7 @@ const MEMORABLE_MOMENTS = [
     date: 'March 6, 2026',
     icon: Zap,
     color: '#F97316',
+    videoUrl: '/videos/longest_hr.mov',
   },
   {
     id: 'perfect-game',
@@ -88,6 +89,7 @@ const MEMORABLE_MOMENTS = [
     date: 'April 25, 2026',
     icon: Zap,
     color: '#F0B429',
+    videoUrl: '/videos/trio.mov',
   },
 ];
 
@@ -95,11 +97,14 @@ const MEMORABLE_MOMENTS = [
 function MomentCard({
   moment,
   index,
+  onPlay,
 }: {
   moment: (typeof MEMORABLE_MOMENTS)[0];
   index: number;
+  onPlay?: () => void;
 }) {
   const IconComponent = moment.icon;
+  const hasVideo = 'videoUrl' in moment && moment.videoUrl;
 
   return (
     <motion.div
@@ -107,11 +112,13 @@ function MomentCard({
       variants={fadeUp}
       initial="hidden"
       animate="visible"
-      className="rounded-xl p-5"
+      onClick={hasVideo ? onPlay : undefined}
+      className={`rounded-xl p-5 ${hasVideo ? 'cursor-pointer' : ''}`}
       style={{
         background: '#0F1829',
-        border: '1px solid rgba(255,255,255,0.07)',
+        border: hasVideo ? `1px solid ${moment.color}40` : '1px solid rgba(255,255,255,0.07)',
       }}
+      whileTap={hasVideo ? { scale: 0.98 } : undefined}
     >
       <div className="flex items-start gap-4">
         <div
@@ -132,6 +139,11 @@ function MomentCard({
             >
               {moment.title}
             </span>
+            {hasVideo && (
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${moment.color}20`, color: moment.color }}>
+                VIDEO
+              </span>
+            )}
           </div>
 
           <div className="text-xl font-bold text-[#EFF2FF] mb-2">
@@ -202,10 +214,48 @@ function SeasonAwardCard({
   );
 }
 
+// Video modal
+function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: string; onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.9)' }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="relative w-full max-w-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white"
+        >
+          <X size={24} />
+        </button>
+        <div className="text-center text-white font-bold mb-3">{title}</div>
+        <video
+          src={videoUrl}
+          controls
+          autoPlay
+          className="w-full rounded-xl"
+          style={{ maxHeight: '70vh' }}
+        />
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default function AwardsPage() {
   const [awards, setAwards] = useState<Award[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeVideo, setActiveVideo] = useState<{ url: string; title: string } | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -281,11 +331,27 @@ export default function AwardsPage() {
           </div>
           <div className="space-y-3">
             {MEMORABLE_MOMENTS.map((moment, i) => (
-              <MomentCard key={moment.id} moment={moment} index={i + awards.length} />
+              <MomentCard
+                key={moment.id}
+                moment={moment}
+                index={i + awards.length}
+                onPlay={'videoUrl' in moment && moment.videoUrl ? () => setActiveVideo({ url: moment.videoUrl!, title: moment.title }) : undefined}
+              />
             ))}
           </div>
         </div>
       </div>
+
+      {/* Video Modal */}
+      <AnimatePresence>
+        {activeVideo && (
+          <VideoModal
+            videoUrl={activeVideo.url}
+            title={activeVideo.title}
+            onClose={() => setActiveVideo(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
