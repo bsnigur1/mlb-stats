@@ -959,6 +959,7 @@ export default function GamePage() {
     let newOuts = game.current_outs;
     let newInning = game.current_inning;
     let newBaserunners = [...baserunners];
+    let nextPitcherId = currentPitcherId;
 
     // Calculate runs and new baserunner positions
     let totalRuns = runsInput;
@@ -1070,6 +1071,12 @@ export default function GamePage() {
         newOuts = 0;
         newInning++;
         newBaserunners = [];
+
+        // Auto-rotate pitcher to next player
+        const currentPitcherIdx = gamePlayers.findIndex(gp => gp.player_id === currentPitcherId);
+        const nextPitcherIdx = (currentPitcherIdx + 1) % gamePlayers.length;
+        nextPitcherId = gamePlayers[nextPitcherIdx].player_id;
+        setCurrentPitcherId(nextPitcherId);
       }
 
       // Attribute runs to the pitchers who put runners on
@@ -1230,10 +1237,10 @@ export default function GamePage() {
     // Update game state
     await supabase
       .from('games')
-      .update({ current_outs: newOuts, current_inning: newInning, current_pitcher_id: currentPitcherId })
+      .update({ current_outs: newOuts, current_inning: newInning, current_pitcher_id: nextPitcherId })
       .eq('id', gameId);
 
-    setGame({ ...game, current_outs: newOuts, current_inning: newInning, current_pitcher_id: currentPitcherId });
+    setGame({ ...game, current_outs: newOuts, current_inning: newInning, current_pitcher_id: nextPitcherId });
     setBaserunners(newBaserunners);
 
     // Update local pitching stats for display
