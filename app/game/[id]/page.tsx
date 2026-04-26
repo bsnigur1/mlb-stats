@@ -1862,6 +1862,25 @@ export default function GamePage() {
                 return `${stats.hits}-${stats.at_bats} (${formatAvg(stats.avg)}) this game`;
               })()}
             </div>
+
+            {/* Change Batter */}
+            <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-white/5">
+              <span className="text-[10px] text-[#4A5772] uppercase tracking-wide mr-1">Switch:</span>
+              {gamePlayers.map((gp, idx) => (
+                <button
+                  key={gp.player_id}
+                  onClick={() => setCurrentBatterIndex(idx)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all"
+                  style={{
+                    background: idx === currentBatterIndex ? '#F0B429' : '#162035',
+                    color: idx === currentBatterIndex ? '#080D18' : '#8A9BBB',
+                    border: idx === currentBatterIndex ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >
+                  {gp.player.name[0]}
+                </button>
+              ))}
+            </div>
           </motion.div>
         )}
 
