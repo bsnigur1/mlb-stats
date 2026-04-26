@@ -1311,7 +1311,6 @@ export default function GamePage() {
     // Update local state
     setAtBats(prev => prev.filter(ab => ab.id !== lastEvent.atBatId));
     setGame({ ...game, current_outs: lastEvent.prevOuts, current_inning: lastEvent.prevInning });
-    setIsPitchingMode(lastEvent.prevIsPitchingMode);
     setCurrentBatterIndex(lastEvent.prevBatterIndex);
 
     // Remove from history
@@ -1371,7 +1370,6 @@ export default function GamePage() {
     // Update local state
     setGame({ ...game, current_outs: lastEvent.prevOuts, current_inning: lastEvent.prevInning });
     setBaserunners(lastEvent.prevBaserunners);
-    setIsPitchingMode(lastEvent.prevIsPitchingMode);
 
     // Update local pitching stats
     const newPitchingStats = { ...pitchingStats };
