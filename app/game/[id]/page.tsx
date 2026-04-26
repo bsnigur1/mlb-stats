@@ -1701,7 +1701,19 @@ export default function GamePage() {
 
         {/* Outs indicator in header */}
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[#4A5772] uppercase tracking-wider">Outs</span>
+          <button
+            onClick={async () => {
+              if (game.current_outs > 0) {
+                const newOuts = game.current_outs - 1;
+                await supabase.from('games').update({ current_outs: newOuts }).eq('id', gameId);
+                setGame({ ...game, current_outs: newOuts });
+              }
+            }}
+            className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
+            style={{ background: '#162035', color: '#8A9BBB', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            -
+          </button>
           <div className="flex gap-1.5">
             {[0, 1, 2].map((i) => (
               <Circle
@@ -1712,6 +1724,19 @@ export default function GamePage() {
               />
             ))}
           </div>
+          <button
+            onClick={async () => {
+              if (game.current_outs < 2) {
+                const newOuts = game.current_outs + 1;
+                await supabase.from('games').update({ current_outs: newOuts }).eq('id', gameId);
+                setGame({ ...game, current_outs: newOuts });
+              }
+            }}
+            className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
+            style={{ background: '#162035', color: '#8A9BBB', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            +
+          </button>
         </div>
       </div>
 
