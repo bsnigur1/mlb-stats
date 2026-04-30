@@ -223,9 +223,9 @@ export default function GamePage() {
   // Runner action popup (for caught stealing, advancing, etc.)
   const [editingRunner, setEditingRunner] = useState<1 | 2 | 3 | null>(null);
   // Career stats for milestone tracking (stats BEFORE this game)
-  const [careerStats, setCareerStats] = useState<Record<string, { hr: number; rbi: number; hits: number; k: number }>>({});
+  const [careerStats, setCareerStats] = useState<Record<string, { hr: number; rbi: number; hits: number; k: number; ab: number }>>({});
   // Season stats for milestone tracking (stats in current season BEFORE this game)
-  const [seasonStats, setSeasonStats] = useState<Record<string, { hr: number; rbi: number; hits: number; k: number }>>({});
+  const [seasonStats, setSeasonStats] = useState<Record<string, { hr: number; rbi: number; hits: number; k: number; ab: number }>>({});
   // Career pitching stats for milestone tracking
   const [careerPitchingK, setCareerPitchingK] = useState<Record<string, number>>({});
   // Season pitching stats for milestone tracking
@@ -319,14 +319,16 @@ export default function GamePage() {
         offset += batchSize;
       }
 
-      const stats: Record<string, { hr: number; rbi: number; hits: number; k: number }> = {};
+      const stats: Record<string, { hr: number; rbi: number; hits: number; k: number; ab: number }> = {};
       playerIds.forEach(pid => {
         const playerAbs = allCareerAtBats.filter(ab => ab.player_id === pid);
         const hr = playerAbs.filter(ab => ab.result === 'homerun').length;
         const rbi = playerAbs.reduce((sum, ab) => sum + (ab.rbi || 0), 0);
         const hits = playerAbs.filter(ab => ['single', 'double', 'triple', 'homerun'].includes(ab.result)).length;
         const k = playerAbs.filter(ab => ab.result === 'strikeout').length;
-        stats[pid] = { hr, rbi, hits, k };
+        const outs = playerAbs.filter(ab => ab.result === 'out').length;
+        const ab = hits + k + outs;
+        stats[pid] = { hr, rbi, hits, k, ab };
       });
       setCareerStats(stats);
 
@@ -358,21 +360,23 @@ export default function GamePage() {
             seasonOffset += batchSize;
           }
 
-          const sStats: Record<string, { hr: number; rbi: number; hits: number; k: number }> = {};
+          const sStats: Record<string, { hr: number; rbi: number; hits: number; k: number; ab: number }> = {};
           playerIds.forEach(pid => {
             const playerAbs = allSeasonAtBats.filter(ab => ab.player_id === pid);
             const hr = playerAbs.filter(ab => ab.result === 'homerun').length;
             const rbi = playerAbs.reduce((sum, ab) => sum + (ab.rbi || 0), 0);
             const hits = playerAbs.filter(ab => ['single', 'double', 'triple', 'homerun'].includes(ab.result)).length;
             const k = playerAbs.filter(ab => ab.result === 'strikeout').length;
-            sStats[pid] = { hr, rbi, hits, k };
+            const outs = playerAbs.filter(ab => ab.result === 'out').length;
+            const ab = hits + k + outs;
+            sStats[pid] = { hr, rbi, hits, k, ab };
           });
           setSeasonStats(sStats);
         } else {
           // No other games in season yet
-          const emptyStats: Record<string, { hr: number; rbi: number; hits: number; k: number }> = {};
+          const emptyStats: Record<string, { hr: number; rbi: number; hits: number; k: number; ab: number }> = {};
           playerIds.forEach(pid => {
-            emptyStats[pid] = { hr: 0, rbi: 0, hits: 0, k: 0 };
+            emptyStats[pid] = { hr: 0, rbi: 0, hits: 0, k: 0, ab: 0 };
           });
           setSeasonStats(emptyStats);
         }
@@ -1886,12 +1890,30 @@ export default function GamePage() {
             <div className="text-3xl font-bold text-[#EFF2FF]">{currentPlayer.player.name}</div>
             <div className="text-sm text-[#4A5772] mt-2">
               {(() => {
-                const stats = calculateStats(
+                const gameStats = calculateStats(
                   currentPlayer.player_id,
                   currentPlayer.player.name,
                   atBats
                 );
-                return `${stats.hits}-${stats.at_bats} (${formatAvg(stats.avg)}) this game`;
+                const season = seasonStats[currentPlayer.player_id] || { hits: 0, ab: 0 };
+                const totalHits = season.hits + gameStats.hits;
+                const totalAb = season.ab + gameStats.at_bats;
+                const seasonAvg = totalAb > 0 ? totalHits / totalAb : 0;
+                return `${gameStats.hits}-${gameStats.at_bats} this game`;
+              })()}
+            </div>
+            <div className="text-lg font-bold text-[#F0B429] mt-1">
+              {(() => {
+                const gameStats = calculateStats(
+                  currentPlayer.player_id,
+                  currentPlayer.player.name,
+                  atBats
+                );
+                const season = seasonStats[currentPlayer.player_id] || { hits: 0, ab: 0 };
+                const totalHits = season.hits + gameStats.hits;
+                const totalAb = season.ab + gameStats.at_bats;
+                const seasonAvg = totalAb > 0 ? totalHits / totalAb : 0;
+                return `${formatAvg(seasonAvg)} AVG`;
               })()}
             </div>
 
