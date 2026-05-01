@@ -2325,7 +2325,7 @@ export default function GamePage() {
                     <span className="text-sm font-medium text-[#EFF2FF]">{gp.player.name}</span>
                   </div>
                   <span className="text-sm text-[#8A9BBB] tabular-nums">
-                    {stats.hits}-{stats.at_bats}, {stats.rbi} RBI
+                    {stats.hits}-{stats.at_bats} ({formatAvg(stats.avg)}), {stats.rbi} RBI
                     {stats.homeruns > 0 && `, ${stats.homeruns} HR`}
                   </span>
                 </div>
