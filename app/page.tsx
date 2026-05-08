@@ -17,6 +17,8 @@ import {
   Settings,
   Minus,
   Radio,
+  Play,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -461,6 +463,7 @@ export default function Dashboard() {
   const [pitchingStatsData, setPitchingStatsData] = useState<{ player_id: string; game_id: string; strikeouts: number }[]>([]);
   const [season2026, setSeason2026] = useState<Season | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeVideo, setActiveVideo] = useState<{ url: string; title: string } | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -911,23 +914,30 @@ export default function Dashboard() {
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-3.5 rounded-lg"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setActiveVideo({ url: '/videos/judge_509.mov', title: '509 Foot Homerun' })}
+                className="p-3.5 rounded-lg cursor-pointer relative"
                 style={{
                   background: '#0F1829',
                   border: '1px solid rgba(240,180,41,0.2)',
                 }}
               >
+                <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide flex items-center gap-1" style={{ background: 'rgba(240,180,41,0.2)', color: '#F0B429' }}>
+                  <Play size={8} fill="#F0B429" />
+                  Video
+                </div>
                 <div className="flex items-center gap-2 mb-1">
                   <div
                     className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
                     style={{ background: 'rgba(240,180,41,0.15)', color: '#F0B429' }}
                   >
-                    G
+                    B
                   </div>
-                  <span className="text-sm font-semibold text-[#EFF2FF]">Greg</span>
+                  <span className="text-sm font-semibold text-[#EFF2FF]">Bryan</span>
                 </div>
-                <div className="text-sm text-[#F0B429] font-bold">498 Foot Homerun</div>
-                <div className="text-xs text-[#4A5772] mt-0.5">Using Judge · April 2</div>
+                <div className="text-sm text-[#F0B429] font-bold">509 Foot Homerun</div>
+                <div className="text-xs text-[#4A5772] mt-0.5">Using Judge · May 7</div>
               </motion.div>
             </div>
           </div>
@@ -935,6 +945,43 @@ export default function Dashboard() {
       </div>
 
       <BottomNav />
+
+      {/* Video Modal */}
+      <AnimatePresence>
+        {activeVideo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.9)' }}
+            onClick={() => setActiveVideo(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.9 }}
+              className="relative w-full max-w-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setActiveVideo(null)}
+                className="absolute -top-10 right-0 p-2 text-white/70 hover:text-white"
+              >
+                <X size={24} />
+              </button>
+              <div className="text-center text-white font-bold mb-3">{activeVideo.title}</div>
+              <video
+                src={activeVideo.url}
+                controls
+                autoPlay
+                className="w-full rounded-xl"
+                style={{ maxHeight: '70vh' }}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
