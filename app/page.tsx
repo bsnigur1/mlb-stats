@@ -19,12 +19,14 @@ import {
   Radio,
   Play,
   X,
+  Users,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Player, Session, Game, GamePlayer, AtBat, HotStreak, Season } from '@/lib/types';
 import { calculateHotStreaks, formatHotStreak } from '@/lib/hot-streaks';
+import { didPlayerWin } from '@/lib/stats';
 import { Target } from 'lucide-react';
 
 // Milestone thresholds
@@ -144,6 +146,7 @@ function TypeBadge({ type }: { type: string }) {
     '2v2': { bg: 'rgba(96,165,250,0.1)', color: '#60A5FA', border: 'rgba(96,165,250,0.2)', label: '2v2' },
     '3v3': { bg: 'rgba(52,211,153,0.1)', color: '#34D399', border: 'rgba(52,211,153,0.2)', label: '3v3' },
     '1v1': { bg: 'rgba(240,180,41,0.1)', color: '#F0B429', border: 'rgba(240,180,41,0.2)', label: 'H2H' },
+    '2v2_teams': { bg: 'rgba(240,180,41,0.1)', color: '#F0B429', border: 'rgba(240,180,41,0.2)', label: '2v2 Teams' },
   }[type] || { bg: 'rgba(96,165,250,0.1)', color: '#60A5FA', border: 'rgba(96,165,250,0.2)', label: type };
 
   return (
@@ -329,6 +332,7 @@ const NAV_ITEMS = [
   { icon: Home, label: 'Dashboard', href: '/', active: true },
   { icon: BookOpen, label: 'Sessions', href: '/sessions', active: false },
   { icon: BarChart2, label: 'Stats', href: '/stats', active: false },
+  { icon: Users, label: '2v2', href: '/2v2', active: false },
   { icon: ArrowLeftRight, label: 'Head-to-Head', href: '/h2h', active: false },
   { icon: Trophy, label: 'Awards', href: '/awards', active: false },
 ];
@@ -374,7 +378,7 @@ function Sidebar() {
 function BottomNav() {
   return (
     <div className="bottom-nav fixed bottom-0 left-0 right-0 flex z-50" style={{ background: '#0F1829', borderTop: '1px solid rgba(255,255,255,0.07)', padding: '8px 0 max(8px, env(safe-area-inset-bottom))' }}>
-      {NAV_ITEMS.slice(0, 5).map((item) => (
+      {NAV_ITEMS.map((item) => (
         <Link key={item.label} href={item.href} className="flex-1">
           <div className="flex flex-col items-center gap-1 text-[10px] font-medium uppercase tracking-wide" style={{ color: item.active ? '#F0B429' : '#4A5772' }}>
             <item.icon size={18} />
@@ -404,6 +408,7 @@ function LogGameDropdown() {
 
   const gameModes = [
     { mode: '2v2', label: '2v2 Co-Op', color: '#60A5FA', bg: 'rgba(96,165,250,0.1)' },
+    { mode: '2v2_teams', label: '2v2 Teams', color: '#F0B429', bg: 'rgba(240,180,41,0.1)' },
     { mode: '3v3', label: '3v3 Co-Op', color: '#34D399', bg: 'rgba(52,211,153,0.1)' },
     { mode: '1v1', label: 'H2H', color: '#F0B429', bg: 'rgba(240,180,41,0.1)' },
   ];
@@ -551,8 +556,15 @@ export default function Dashboard() {
     const playerGames = season2026Games.filter(g =>
       g.game_players?.some(gp => gp.player_id === player.id)
     );
-    const wins = playerGames.filter(g => g.score?.includes('W')).length;
-    const losses = playerGames.filter(g => g.score?.includes('L')).length;
+    // Team-aware W/L: 2v2 Teams games are decided by the player's team vs winning_team
+    let wins = 0;
+    let losses = 0;
+    playerGames.forEach(g => {
+      const team = g.game_players?.find(gp => gp.player_id === player.id)?.team ?? null;
+      const won = didPlayerWin(g, team);
+      if (won === true) wins += 1;
+      else if (won === false) losses += 1;
+    });
 
     // Calculate hot streaks (uses all recent games for hot streaks, not just 2026)
     // Attach at_bats from the separately loaded array to ensure they're populated
@@ -755,7 +767,7 @@ export default function Dashboard() {
             className="mb-7"
           >
             {games.filter(g => g.status === 'in_progress').map((liveGame) => (
-              <Link key={liveGame.id} href={`/live/${liveGame.id}`}>
+              <Link key={liveGame.id} href={liveGame.game_mode === '2v2_teams' ? `/team-game/${liveGame.id}` : `/live/${liveGame.id}`}>
                 <motion.div
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
@@ -774,7 +786,7 @@ export default function Dashboard() {
                   <div className="flex-1">
                     <div className="text-sm font-bold text-[#EFF2FF]">Game in Progress</div>
                     <div className="text-xs text-[#8A9BBB]">
-                      {liveGame.game_mode === '1v1' ? 'Head to Head' : `${liveGame.game_mode} Co-Op`} · Inning {liveGame.current_inning}
+                      {liveGame.game_mode === '1v1' ? 'Head to Head' : liveGame.game_mode === '2v2_teams' ? '2v2 Teams' : `${liveGame.game_mode} Co-Op`} · Inning {liveGame.current_inning}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

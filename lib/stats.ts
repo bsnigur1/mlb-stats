@@ -61,6 +61,23 @@ export function calculateStats(
   };
 }
 
+// Determine whether a player won a given game.
+// For 2v2 Teams, the two duos share one game with opposite results, so the win is
+// decided by winning_team vs the player's team. All other modes fall back to the
+// game's score string (shared by everyone on the tracked side). Returns null when undecided.
+export function didPlayerWin(
+  game: { game_mode?: string | null; score?: string | null; winning_team?: number | null },
+  playerTeam?: number | null
+): boolean | null {
+  if (game.game_mode === '2v2_teams') {
+    if (game.winning_team == null || playerTeam == null) return null;
+    return game.winning_team === playerTeam;
+  }
+  if (game.score?.includes('W')) return true;
+  if (game.score?.includes('L')) return false;
+  return null;
+}
+
 export function formatAvg(avg: number): string {
   return avg.toFixed(3).replace(/^0/, '');
 }

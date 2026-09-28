@@ -14,7 +14,7 @@ export type AtBatResult =
 
 export type HeatStatus = 'hot' | 'cold' | 'neutral';
 export type GameResult = 'W' | 'L';
-export type GameMode = '2v2' | '3v3' | '1v1';
+export type GameMode = '2v2' | '3v3' | '1v1' | '2v2_teams';
 export type AwardType = 'MVP_GAME' | 'MVP_SESSION' | 'MVP_WEEK' | 'SEASON_HIGH' | 'HOT_STREAK';
 
 export interface Season {
@@ -80,6 +80,11 @@ export interface Game {
   track_pitching: boolean;
   batting_first: boolean;
   current_pitcher_id: string | null;
+  // 2v2 Teams mode (two real duos face off)
+  winning_team: number | null;
+  batting_team: number | null;
+  team1_pitcher_id: string | null;
+  team2_pitcher_id: string | null;
   created_at: string;
   // Relations
   game_players?: GamePlayer[];
@@ -92,6 +97,8 @@ export interface GamePlayer {
   game_id: string;
   player_id: string;
   batting_order: number;
+  // 2v2 Teams mode: which side this player is on (1 or 2). NULL for other modes.
+  team: number | null;
   player?: Player;
 }
 

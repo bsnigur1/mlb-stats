@@ -12,7 +12,22 @@ import {
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { Player, Game, AtBat, Season } from '@/lib/types';
-import { filterAtBatsBySeason } from '@/lib/stats';
+import { filterAtBatsBySeason, didPlayerWin } from '@/lib/stats';
+
+// Team-aware W/L tally. For 2v2 Teams games the result depends on the player's team;
+// all other modes fall back to the shared game score string.
+function tallyRecord(gameList: Game[], playerId: string): { wins: number; losses: number } {
+  let wins = 0;
+  let losses = 0;
+  for (const g of gameList) {
+    const gp = (g as Game & { game_players?: { player_id: string; team: number | null }[] }).game_players;
+    const team = gp?.find((x) => x.player_id === playerId)?.team ?? gp?.[0]?.team ?? null;
+    const won = didPlayerWin(g, team);
+    if (won === true) wins += 1;
+    else if (won === false) losses += 1;
+  }
+  return { wins, losses };
+}
 
 // Animation variants
 const fadeUp = {
@@ -344,12 +359,11 @@ export default function PlayerProfile({ params }: { params: Promise<{ id: string
     batting.games = seasonGames.length;
     const pitching = calculatePitchingStats(seasonPitching);
 
-    // Win/loss
-    const wins = seasonGames.filter((g) => g.score?.includes('W')).length;
-    const losses = seasonGames.filter((g) => g.score?.includes('L')).length;
+    // Win/loss (team-aware for 2v2 Teams games)
+    const { wins, losses } = tallyRecord(seasonGames, id);
 
     return { batting, pitching, wins, losses };
-  }, [currentSeason, allAtBats, games, allPitchingStats]);
+  }, [currentSeason, allAtBats, games, allPitchingStats, id]);
 
   // Calculate career stats
   const careerStats = useMemo(() => {
@@ -357,11 +371,10 @@ export default function PlayerProfile({ params }: { params: Promise<{ id: string
     batting.games = games.length;
     const pitching = calculatePitchingStats(allPitchingStats);
 
-    const wins = games.filter((g) => g.score?.includes('W')).length;
-    const losses = games.filter((g) => g.score?.includes('L')).length;
+    const { wins, losses } = tallyRecord(games, id);
 
     return { batting, pitching, wins, losses };
-  }, [allAtBats, games, allPitchingStats]);
+  }, [allAtBats, games, allPitchingStats, id]);
 
   // Calculate graph data (rolling stats per game)
   const graphData = useMemo(() => {

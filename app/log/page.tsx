@@ -13,6 +13,7 @@ import {
   Play,
   Plus,
   X,
+  ArrowLeftRight,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -72,6 +73,11 @@ function StartGameContent() {
   const [h2hOpponent, setH2hOpponent] = useState<string | null>(null);
   const [trackPitching, setTrackPitching] = useState(false);
   const [battingFirst, setBattingFirst] = useState(true);
+
+  // 2v2 Teams state — two real duos face off (Team 1 vs Team 2)
+  const [team1, setTeam1] = useState<string[]>([]);
+  const [team2, setTeam2] = useState<string[]>([]);
+  const [teamBattingFirst, setTeamBattingFirst] = useState<1 | 2>(1);
 
   // Add player modal state
   const [showAddPlayer, setShowAddPlayer] = useState(false);
@@ -176,6 +182,44 @@ function StartGameContent() {
         return;
       }
 
+      // For 2v2 Teams mode, create an in-progress game with two real duos
+      if (gameMode === '2v2_teams') {
+        const t1Starter = team1[0];
+        const t2Starter = team2[0];
+        const { data: game } = await supabase
+          .from('games')
+          .insert({
+            session_id: null,
+            season_id: activeSeason?.id || null,
+            date: today,
+            status: 'in_progress',
+            current_inning: 1,
+            current_outs: 0,
+            innings: 9,
+            game_mode: '2v2_teams',
+            track_pitching: true,
+            batting_first: true,
+            batting_team: teamBattingFirst,
+            // Fielding team pitches; each team's starter is its first-listed player
+            team1_pitcher_id: t1Starter,
+            team2_pitcher_id: t2Starter,
+            current_pitcher_id: teamBattingFirst === 1 ? t2Starter : t1Starter,
+          })
+          .select()
+          .single();
+
+        if (!game) throw new Error('Failed to create game');
+
+        const teamGamePlayers = [
+          ...team1.map((playerId, idx) => ({ game_id: game.id, player_id: playerId, batting_order: idx + 1, team: 1 })),
+          ...team2.map((playerId, idx) => ({ game_id: game.id, player_id: playerId, batting_order: idx + 1, team: 2 })),
+        ];
+        await supabase.from('game_players').insert(teamGamePlayers);
+
+        router.push(`/team-game/${game.id}`);
+        return;
+      }
+
       // For co-op modes, create game in 'in_progress' state
       const currentPlayerId = selectedPlayers[0];
       const { data: game } = await supabase
@@ -230,6 +274,18 @@ function StartGameContent() {
     });
   };
 
+  // 2v2 Teams: assign a player to a team (toggles off if already there, moves if on the other)
+  const assignToTeam = (playerId: string, team: 1 | 2) => {
+    const setThis = team === 1 ? setTeam1 : setTeam2;
+    const setOther = team === 1 ? setTeam2 : setTeam1;
+    setOther((prev) => prev.filter((id) => id !== playerId));
+    setThis((prev) => {
+      if (prev.includes(playerId)) return prev.filter((id) => id !== playerId);
+      if (prev.length >= 2) return prev; // max 2 per team
+      return [...prev, playerId];
+    });
+  };
+
   const moveBattingOrder = (playerId: string, direction: 'up' | 'down') => {
     setBattingOrder((prev) => {
       const index = prev.indexOf(playerId);
@@ -246,6 +302,8 @@ function StartGameContent() {
 
   const canStart = gameMode === '1v1'
     ? h2hPlayer1 && h2hPlayer2 && h2hPlayer1Score !== '' && h2hPlayer2Score !== ''
+    : gameMode === '2v2_teams'
+    ? team1.length === 2 && team2.length === 2
     : selectedPlayers.length >= 2;
 
   if (loading) {
@@ -357,6 +415,12 @@ function StartGameContent() {
               1v1 H2H
             </ToggleButton>
           </div>
+          <div className="flex gap-2 mt-2">
+            <ToggleButton active={gameMode === '2v2_teams'} onClick={() => { setGameMode('2v2_teams'); setSelectedPlayers([]); setBattingOrder([]); setH2hOpponent(null); }}>
+              <ArrowLeftRight size={14} className="inline mr-1.5" />
+              2v2 Teams (4 players)
+            </ToggleButton>
+          </div>
         </motion.div>
 
         {/* Players - for Co-Op modes */}
@@ -459,6 +523,136 @@ function StartGameContent() {
                 })}
             </div>
           </motion.div>
+        )}
+
+        {/* 2v2 Teams - assign 4 players to two duos */}
+        {gameMode === '2v2_teams' && (
+          <>
+            <motion.div custom={1} variants={fadeUp} initial="hidden" animate="visible">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] text-[#4A5772] uppercase tracking-widest block">
+                  Build the two teams
+                </label>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowAddPlayer(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+                  style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)', color: '#60A5FA' }}
+                >
+                  <Plus size={14} /> Add Player
+                </motion.button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {([1, 2] as const).map((teamNum) => {
+                  const roster = teamNum === 1 ? team1 : team2;
+                  const accent = teamNum === 1 ? '#F0B429' : '#60A5FA';
+                  return (
+                    <div
+                      key={teamNum}
+                      className="rounded-lg p-3"
+                      style={{ background: '#0F1829', border: `1px solid ${roster.length ? accent + '55' : 'rgba(255,255,255,0.07)'}` }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider" style={{ color: accent }}>
+                          Team {teamNum}
+                        </span>
+                        <span className="text-[10px] text-[#4A5772] tabular-nums">{roster.length}/2</span>
+                      </div>
+                      <div className="space-y-1.5 min-h-[64px]">
+                        {roster.map((pid, idx) => {
+                          const player = players.find((p) => p.id === pid);
+                          if (!player) return null;
+                          return (
+                            <div key={pid} className="flex items-center gap-2 px-2 py-1.5 rounded-md" style={{ background: '#162035' }}>
+                              <span className="text-[10px] font-bold tabular-nums w-3" style={{ color: accent }}>{idx + 1}</span>
+                              <span className="flex-1 text-sm text-[#EFF2FF] truncate">{player.name}</span>
+                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => assignToTeam(pid, teamNum)}>
+                                <X size={13} color="#8A9BBB" />
+                              </motion.button>
+                            </div>
+                          );
+                        })}
+                        {roster.length === 0 && (
+                          <div className="text-[11px] text-[#4A5772] italic py-2 text-center">Pick 2 players</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+
+            {/* Player picker */}
+            <motion.div custom={2} variants={fadeUp} initial="hidden" animate="visible">
+              <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                Tap a player, then choose a team
+              </label>
+              <div className="space-y-2">
+                {players.map((player) => {
+                  const onTeam1 = team1.includes(player.id);
+                  const onTeam2 = team2.includes(player.id);
+                  return (
+                    <div
+                      key={player.id}
+                      className="flex items-center gap-2 p-2 rounded-lg"
+                      style={{ background: '#0F1829', border: '1px solid rgba(255,255,255,0.07)' }}
+                    >
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold" style={{ background: '#162035', color: '#8A9BBB' }}>
+                        {player.name[0]}
+                      </div>
+                      <span className="flex-1 text-sm font-medium text-[#EFF2FF]">{player.name}</span>
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => assignToTeam(player.id, 1)}
+                        disabled={!onTeam1 && team1.length >= 2}
+                        className="px-3 py-1.5 rounded-md text-xs font-semibold disabled:opacity-30"
+                        style={{ background: onTeam1 ? '#F0B429' : 'rgba(255,255,255,0.05)', color: onTeam1 ? '#080D18' : '#8A9BBB', border: '1px solid rgba(240,180,41,0.3)' }}
+                      >
+                        T1
+                      </motion.button>
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => assignToTeam(player.id, 2)}
+                        disabled={!onTeam2 && team2.length >= 2}
+                        className="px-3 py-1.5 rounded-md text-xs font-semibold disabled:opacity-30"
+                        style={{ background: onTeam2 ? '#60A5FA' : 'rgba(255,255,255,0.05)', color: onTeam2 ? '#080D18' : '#8A9BBB', border: '1px solid rgba(96,165,250,0.3)' }}
+                      >
+                        T2
+                      </motion.button>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-[#4A5772] mt-2">First player listed on each team leads off and starts on the mound.</p>
+            </motion.div>
+
+            {/* Who bats first */}
+            {team1.length === 2 && team2.length === 2 && (
+              <motion.div custom={3} variants={fadeUp} initial="hidden" animate="visible">
+                <label className="text-[11px] text-[#4A5772] uppercase tracking-widest mb-2 block">
+                  Who bats first? (away team)
+                </label>
+                <div className="flex gap-2">
+                  {([1, 2] as const).map((teamNum) => {
+                    const accent = teamNum === 1 ? '#F0B429' : '#60A5FA';
+                    const active = teamBattingFirst === teamNum;
+                    const names = (teamNum === 1 ? team1 : team2).map((id) => players.find((p) => p.id === id)?.name).filter(Boolean).join(' + ');
+                    return (
+                      <motion.button
+                        key={teamNum}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => setTeamBattingFirst(teamNum)}
+                        className="flex-1 py-3 px-3 rounded-lg text-sm font-semibold transition-colors"
+                        style={{ background: active ? accent : 'rgba(255,255,255,0.05)', color: active ? '#080D18' : '#8A9BBB', border: `1px solid ${active ? accent : 'rgba(255,255,255,0.1)'}` }}
+                      >
+                        {names || `Team ${teamNum}`}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </>
         )}
 
         {/* Player selection - for 1v1 mode (quick log) */}
