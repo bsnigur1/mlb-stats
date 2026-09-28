@@ -131,13 +131,21 @@ function HeatBadge({ heat, streak, streakType }: { heat: string; streak: number;
 }
 
 // Result dot
-function ResultDot({ result }: { result: 'W' | 'L' }) {
+function ResultDot({ result }: { result: 'W' | 'L' | 'N' }) {
+  const color = result === 'W' ? '#34D399' : result === 'L' ? '#F87171' : '#F0B429';
   return (
     <span
       className="inline-block w-[7px] h-[7px] rounded-full flex-shrink-0"
-      style={{ background: result === 'W' ? '#34D399' : '#F87171' }}
+      style={{ background: color }}
     />
   );
+}
+
+// Result letter for a game from the dashboard's perspective. 2v2 Teams games have two
+// opposite outcomes, so they get a neutral marker instead of a false W/L.
+function gameResult(g: Game): 'W' | 'L' | 'N' {
+  if (g.game_mode === '2v2_teams') return 'N';
+  return g.score?.includes('W') ? 'W' : 'L';
 }
 
 // Type badge for game modes
@@ -213,8 +221,9 @@ function SessionCard({ session, index, games }: { session: Session; index: numbe
   const [expanded, setExpanded] = useState(false);
   const router = useRouter();
   const sessionGames = games.filter(g => g.session_id === session.id && g.game_mode !== '1v1');
+  // 2v2 Teams games have no single "our" result — count them as neither W nor L for the session tally
   const wins = sessionGames.filter(g => g.status === 'completed' && g.score?.startsWith('W')).length;
-  const losses = sessionGames.length - wins;
+  const losses = sessionGames.filter(g => g.status === 'completed' && g.score?.startsWith('L')).length;
 
   const handleClick = () => {
     if (expanded) {
@@ -247,7 +256,7 @@ function SessionCard({ session, index, games }: { session: Session; index: numbe
           </div>
           <div className="flex items-center gap-1.5">
             {sessionGames.slice(0, 5).map((g, i) => (
-              <ResultDot key={i} result={g.score?.includes('W') ? 'W' : 'L'} />
+              <ResultDot key={i} result={gameResult(g)} />
             ))}
             <span className="text-[11px] text-[#4A5772] ml-1">
               {wins}W {losses}L · {sessionGames.length} games
@@ -280,14 +289,20 @@ function SessionCard({ session, index, games }: { session: Session; index: numbe
               {sessionGames.map((game) => (
                 <Link key={game.id} href={`/recap/${game.id}`}>
                   <div className="flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
-                    <ResultDot result={game.score?.includes('W') ? 'W' : 'L'} />
+                    <ResultDot result={gameResult(game)} />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="text-[13px] font-semibold text-[#EFF2FF]">
-                          {game.score?.includes('W') ? 'W' : 'L'}{' '}
-                          <span style={{ color: game.score?.includes('W') ? '#34D399' : '#F87171' }}>
-                            {game.score?.replace(/^[WL]\s*/, '') || '0-0'}
-                          </span>
+                          {game.game_mode === '2v2_teams' ? (
+                            <span style={{ color: '#F0B429' }}>{game.score || '0-0'}</span>
+                          ) : (
+                            <>
+                              {game.score?.includes('W') ? 'W' : 'L'}{' '}
+                              <span style={{ color: game.score?.includes('W') ? '#34D399' : '#F87171' }}>
+                                {game.score?.replace(/^[WL]\s*/, '') || '0-0'}
+                              </span>
+                            </>
+                          )}
                         </span>
                         <TypeBadge type={game.game_mode} />
                       </div>

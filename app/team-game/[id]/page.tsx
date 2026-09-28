@@ -282,6 +282,36 @@ export default function TeamGamePage() {
     const s1 = parseInt(t1Final) || 0;
     const s2 = parseInt(t2Final) || 0;
     const winning_team = s1 > s2 ? 1 : s2 > s1 ? 2 : null;
+
+    // Attach to a session so the game surfaces on the dashboard (same as co-op games)
+    const now = new Date();
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
+    const today = now.toISOString().split('T')[0];
+    let sessionId: string | null = null;
+    const { data: recentSessions } = await supabase
+      .from('sessions')
+      .select('*')
+      .neq('id', 'a0000000-0000-0000-0000-000000000001')
+      .gte('last_activity', twoHoursAgo)
+      .order('last_activity', { ascending: false })
+      .limit(1);
+    if (recentSessions && recentSessions.length > 0) {
+      sessionId = recentSessions[0].id;
+      await supabase.from('sessions').update({ last_activity: now.toISOString() }).eq('id', sessionId);
+    } else {
+      const { data: newSession } = await supabase
+        .from('sessions')
+        .insert({
+          date: today,
+          label: `Game Night ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+          last_activity: now.toISOString(),
+          is_active: true,
+        })
+        .select()
+        .single();
+      sessionId = newSession?.id || null;
+    }
+
     await supabase
       .from('games')
       .update({
@@ -289,6 +319,7 @@ export default function TeamGamePage() {
         score: `${s1}-${s2}`,
         winning_team,
         innings: state.inning,
+        session_id: sessionId,
       })
       .eq('id', gameId);
     router.push(`/recap/${gameId}`);
